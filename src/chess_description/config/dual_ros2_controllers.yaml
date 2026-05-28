@@ -1,0 +1,46 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 250
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    white_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    black_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+white_arm_controller:
+  ros__parameters:
+    joints:
+      - white_joint_1
+      - white_joint_2
+      - white_joint_3
+      - white_joint_4
+      - white_joint_5
+      - white_joint_6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_partial_joints_goal: false
+    open_loop_control: false
+
+black_arm_controller:
+  ros__parameters:
+    joints:
+      - black_joint_1
+      - black_joint_2
+      - black_joint_3
+      - black_joint_4
+      - black_joint_5
+      - black_joint_6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_partial_joints_goal: false
+    open_loop_control: false

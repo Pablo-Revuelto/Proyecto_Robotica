@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<!--
+Single ros2_control system covering both IRB120 arms (12 joints in total).
+Backed by gz_ros2_control in Gazebo. The controllers are declared in
+chess_description/config/dual_ros2_controllers.yaml.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="dual_irb120_ros2control"
+               params="white_prefix:='white_' black_prefix:='black_'">
+
+    <ros2_control name="ChessGazeboSystem" type="system">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+
+      <xacro:macro name="arm_joints" params="prefix initial_5">
+        <joint name="${prefix}joint_1">
+          <command_interface name="position">
+            <param name="min">-2.87979</param><param name="max">2.87979</param>
+          </command_interface>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"/>
+        </joint>
+        <joint name="${prefix}joint_2">
+          <command_interface name="position">
+            <param name="min">-1.91986</param><param name="max">1.91986</param>
+          </command_interface>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"/>
+        </joint>
+        <joint name="${prefix}joint_3">
+          <command_interface name="position">
+            <param name="min">-1.91986</param><param name="max">1.22173</param>
+          </command_interface>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"/>
+        </joint>
+        <joint name="${prefix}joint_4">
+          <command_interface name="position">
+            <param name="min">-2.79253</param><param name="max">2.79253</param>
+          </command_interface>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"/>
+        </joint>
+        <joint name="${prefix}joint_5">
+          <command_interface name="position">
+            <param name="min">-2.00</param><param name="max">2.00</param>
+          </command_interface>
+          <state_interface name="position"><param name="initial_value">${initial_5}</param></state_interface>
+          <state_interface name="velocity"/>
+        </joint>
+        <joint name="${prefix}joint_6">
+          <command_interface name="position">
+            <param name="min">-6.98132</param><param name="max">6.98132</param>
+          </command_interface>
+          <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="velocity"/>
+        </joint>
+      </xacro:macro>
+
+      <xacro:arm_joints prefix="${white_prefix}" initial_5="1.570796"/>
+      <xacro:arm_joints prefix="${black_prefix}" initial_5="1.570796"/>
+    </ros2_control>
+
+    <gazebo>
+      <plugin filename="gz_ros2_control-system"
+              name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(find chess_description)/config/dual_ros2_controllers.yaml</parameters>
+      </plugin>
+    </gazebo>
+
+    <xacro:macro name="arm_gazebo_refs" params="prefix">
+      <gazebo reference="${prefix}base_link"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}link_1"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}link_2"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}link_3"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}link_4"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}link_5"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}link_6"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}gripper_base"><selfCollide>false</selfCollide></gazebo>
+      <gazebo reference="${prefix}gripper_shaft"><selfCollide>false</selfCollide></gazebo>
+    </xacro:macro>
+
+    <xacro:arm_gazebo_refs prefix="${white_prefix}"/>
+    <xacro:arm_gazebo_refs prefix="${black_prefix}"/>
+
+  </xacro:macro>
+
+</robot>

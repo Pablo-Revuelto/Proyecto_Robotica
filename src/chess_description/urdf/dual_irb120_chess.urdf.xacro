@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!--
+Top-level scene description for the dual-arm chess setup:
+  - "world" root link
+  - white ABB IRB120 at (-0.45, 0, 0) facing +X
+  - black ABB IRB120 at ( 0.45, 0, 0) facing -X (yaw = pi)
+  - magnetic gripper on each tool0
+  - a unified 12-joint ros2_control + gz_ros2_control plugin
+
+Pieces and the board are NOT included here. They are spawned at runtime by
+chess_gazebo so they can be deleted/recreated cleanly during play.
+
+Arg:
+  use_gazebo (default true): include the gz_ros2_control block. Set to false
+    for a MoveIt-only robot_description.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dual_irb120_chess">
+
+  <xacro:arg name="use_gazebo"    default="true"/>
+  <xacro:arg name="white_prefix"  default="white_"/>
+  <xacro:arg name="black_prefix"  default="black_"/>
+  <xacro:arg name="robot_spacing" default="0.45"/>
+
+  <xacro:include filename="$(find chess_description)/urdf/irb120_arm.urdf.xacro"/>
+  <xacro:include filename="$(find chess_description)/urdf/magnetic_gripper.urdf.xacro"/>
+  <xacro:include filename="$(find chess_description)/urdf/dual_ros2_control.urdf.xacro"/>
+
+  <link name="world"/>
+
+  <xacro:irb120_arm prefix="$(arg white_prefix)"/>
+  <xacro:irb120_arm prefix="$(arg black_prefix)"/>
+
+  <joint name="world_to_white" type="fixed">
+    <parent link="world"/>
+    <child  link="$(arg white_prefix)base_link"/>
+    <origin xyz="-$(arg robot_spacing) 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="world_to_black" type="fixed">
+    <parent link="world"/>
+    <child  link="$(arg black_prefix)base_link"/>
+    <origin xyz="$(arg robot_spacing) 0 0" rpy="0 0 ${pi}"/>
+  </joint>
+
+  <xacro:magnetic_gripper prefix="$(arg white_prefix)" parent_link="$(arg white_prefix)tool0"/>
+  <xacro:magnetic_gripper prefix="$(arg black_prefix)" parent_link="$(arg black_prefix)tool0"/>
+
+  <xacro:if value="$(arg use_gazebo)">
+    <xacro:dual_irb120_ros2control
+      white_prefix="$(arg white_prefix)"
+      black_prefix="$(arg black_prefix)"/>
+  </xacro:if>
+
+</robot>

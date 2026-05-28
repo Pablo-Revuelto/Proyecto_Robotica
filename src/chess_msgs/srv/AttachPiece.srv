@@ -1,0 +1,8 @@
+# Backend: create or remove a detachable joint between robot tool and piece
+# in Gazebo. Implemented in chess_motion via Gazebo transport.
+string robot_name
+string piece_model   # e.g. "white_pawn_e2"
+bool   attach        # true = attach, false = detach
+---
+bool success
+string message

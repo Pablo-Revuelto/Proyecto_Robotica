@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SRDF for the dual ABB IRB120 chess scene. Defines:
+  - planning groups: white_arm, black_arm
+  - end-effector tip = gripper_tip (rigid magnetic shaft)
+  - rest pose ("home") and "ready" pose for each arm
+  - per-arm disabled adjacency collisions (replicated from TAREA 3 SRDF)
+-->
+<robot name="dual_irb120_chess">
+
+  <!-- Planning groups -->
+  <group name="white_arm">
+    <chain base_link="white_base_link" tip_link="white_gripper_tip"/>
+  </group>
+
+  <group name="black_arm">
+    <chain base_link="black_base_link" tip_link="black_gripper_tip"/>
+  </group>
+
+  <!-- Rest poses -->
+  <group_state group="white_arm" name="home">
+    <joint name="white_joint_1" value="0"/>
+    <joint name="white_joint_2" value="0"/>
+    <joint name="white_joint_3" value="0"/>
+    <joint name="white_joint_4" value="0"/>
+    <joint name="white_joint_5" value="1.5708"/>
+    <joint name="white_joint_6" value="0"/>
+  </group_state>
+
+  <group_state group="white_arm" name="ready">
+    <joint name="white_joint_1" value="0"/>
+    <joint name="white_joint_2" value="-0.5"/>
+    <joint name="white_joint_3" value="0.5"/>
+    <joint name="white_joint_4" value="0"/>
+    <joint name="white_joint_5" value="1.0708"/>
+    <joint name="white_joint_6" value="0"/>
+  </group_state>
+
+  <group_state group="black_arm" name="home">
+    <joint name="black_joint_1" value="0"/>
+    <joint name="black_joint_2" value="0"/>
+    <joint name="black_joint_3" value="0"/>
+    <joint name="black_joint_4" value="0"/>
+    <joint name="black_joint_5" value="1.5708"/>
+    <joint name="black_joint_6" value="0"/>
+  </group_state>
+
+  <group_state group="black_arm" name="ready">
+    <joint name="black_joint_1" value="0"/>
+    <joint name="black_joint_2" value="-0.5"/>
+    <joint name="black_joint_3" value="0.5"/>
+    <joint name="black_joint_4" value="0"/>
+    <joint name="black_joint_5" value="1.0708"/>
+    <joint name="black_joint_6" value="0"/>
+  </group_state>
+
+  <!-- Virtual joints (both bases are fixed to world) -->
+  <virtual_joint name="white_world_joint" type="fixed"
+                 parent_frame="world" child_link="white_base_link"/>
+  <virtual_joint name="black_world_joint" type="fixed"
+                 parent_frame="world" child_link="black_base_link"/>
+
+  <!-- Disable collisions: adjacent IRB120 links per TAREA 3 SRDF, replicated for both prefixes. -->
+  <disable_collisions link1="white_base_link" link2="white_link_1" reason="Adjacent"/>
+  <disable_collisions link1="white_base_link" link2="white_link_2" reason="Never"/>
+  <disable_collisions link1="white_link_1"    link2="white_link_2" reason="Adjacent"/>
+  <disable_collisions link1="white_link_2"    link2="white_link_3" reason="Adjacent"/>
+  <disable_collisions link1="white_link_2"    link2="white_link_5" reason="Never"/>
+  <disable_collisions link1="white_link_2"    link2="white_link_6" reason="Never"/>
+  <disable_collisions link1="white_link_3"    link2="white_link_4" reason="Adjacent"/>
+  <disable_collisions link1="white_link_3"    link2="white_link_5" reason="Never"/>
+  <disable_collisions link1="white_link_3"    link2="white_link_6" reason="Never"/>
+  <disable_collisions link1="white_link_4"    link2="white_link_5" reason="Adjacent"/>
+  <disable_collisions link1="white_link_4"    link2="white_link_6" reason="Default"/>
+  <disable_collisions link1="white_link_5"    link2="white_link_6" reason="Adjacent"/>
+  <disable_collisions link1="white_link_6"      link2="white_gripper_base"  reason="Adjacent"/>
+  <disable_collisions link1="white_gripper_base" link2="white_gripper_shaft" reason="Adjacent"/>
+  <disable_collisions link1="white_link_5"      link2="white_gripper_base"  reason="Never"/>
+  <disable_collisions link1="white_link_5"      link2="white_gripper_shaft" reason="Never"/>
+  <disable_collisions link1="white_link_4"      link2="white_gripper_base"  reason="Never"/>
+
+  <disable_collisions link1="black_base_link" link2="black_link_1" reason="Adjacent"/>
+  <disable_collisions link1="black_base_link" link2="black_link_2" reason="Never"/>
+  <disable_collisions link1="black_link_1"    link2="black_link_2" reason="Adjacent"/>
+  <disable_collisions link1="black_link_2"    link2="black_link_3" reason="Adjacent"/>
+  <disable_collisions link1="black_link_2"    link2="black_link_5" reason="Never"/>
+  <disable_collisions link1="black_link_2"    link2="black_link_6" reason="Never"/>
+  <disable_collisions link1="black_link_3"    link2="black_link_4" reason="Adjacent"/>
+  <disable_collisions link1="black_link_3"    link2="black_link_5" reason="Never"/>
+  <disable_collisions link1="black_link_3"    link2="black_link_6" reason="Never"/>
+  <disable_collisions link1="black_link_4"    link2="black_link_5" reason="Adjacent"/>
+  <disable_collisions link1="black_link_4"    link2="black_link_6" reason="Default"/>
+  <disable_collisions link1="black_link_5"    link2="black_link_6" reason="Adjacent"/>
+  <disable_collisions link1="black_link_6"      link2="black_gripper_base"  reason="Adjacent"/>
+  <disable_collisions link1="black_gripper_base" link2="black_gripper_shaft" reason="Adjacent"/>
+  <disable_collisions link1="black_link_5"      link2="black_gripper_base"  reason="Never"/>
+  <disable_collisions link1="black_link_5"      link2="black_gripper_shaft" reason="Never"/>
+  <disable_collisions link1="black_link_4"      link2="black_gripper_base"  reason="Never"/>
+
+</robot>

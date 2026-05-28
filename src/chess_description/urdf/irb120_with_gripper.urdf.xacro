@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+Single ABB IRB120 + magnetic gripper, intended to be spawned standalone or
+included by the dual scene. Reuses the irb120_macro.urdf.xacro from the
+unmodified `irb120_jazzy_sim` package.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="irb120_with_gripper">
+
+  <xacro:arg name="prefix"     default=""/>
+  <xacro:arg name="use_gazebo" default="true"/>
+
+  <xacro:include filename="$(find irb120_jazzy_sim)/urdf/irb120_macro.urdf.xacro"/>
+  <xacro:include filename="$(find chess_description)/urdf/magnetic_gripper.urdf.xacro"/>
+
+  <link name="world"/>
+
+  <xacro:irb120
+    bringup="false"
+    robot_ip=""
+    EE="false"
+    EE_name=""
+    prefix="$(arg prefix)"/>
+
+  <joint name="$(arg prefix)world_to_base" type="fixed">
+    <parent link="world"/>
+    <child  link="$(arg prefix)base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:magnetic_gripper prefix="$(arg prefix)" parent_link="$(arg prefix)tool0"/>
+
+</robot>

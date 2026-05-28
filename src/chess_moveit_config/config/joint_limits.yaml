@@ -1,0 +1,15 @@
+# Velocity / acceleration limits replicate TAREA 3 (irb120_jazzy_sim/config/joint_limits.yaml)
+# for each of the two prefixed IRB120s.
+joint_limits:
+  white_joint_1: {has_velocity_limits: true, max_velocity: 4.36332, has_acceleration_limits: true, max_acceleration: 17.4532}
+  white_joint_2: {has_velocity_limits: true, max_velocity: 4.36332, has_acceleration_limits: true, max_acceleration: 17.4532}
+  white_joint_3: {has_velocity_limits: true, max_velocity: 4.36332, has_acceleration_limits: true, max_acceleration: 17.4532}
+  white_joint_4: {has_velocity_limits: true, max_velocity: 5.58505, has_acceleration_limits: true, max_acceleration: 22.3402}
+  white_joint_5: {has_velocity_limits: true, max_velocity: 5.58505, has_acceleration_limits: true, max_acceleration: 22.3402}
+  white_joint_6: {has_velocity_limits: true, max_velocity: 7.33038, has_acceleration_limits: true, max_acceleration: 29.3216}
+  black_joint_1: {has_velocity_limits: true, max_velocity: 4.36332, has_acceleration_limits: true, max_acceleration: 17.4532}
+  black_joint_2: {has_velocity_limits: true, max_velocity: 4.36332, has_acceleration_limits: true, max_acceleration: 17.4532}
+  black_joint_3: {has_velocity_limits: true, max_velocity: 4.36332, has_acceleration_limits: true, max_acceleration: 17.4532}
+  black_joint_4: {has_velocity_limits: true, max_velocity: 5.58505, has_acceleration_limits: true, max_acceleration: 22.3402}
+  black_joint_5: {has_velocity_limits: true, max_velocity: 5.58505, has_acceleration_limits: true, max_acceleration: 22.3402}
+  black_joint_6: {has_velocity_limits: true, max_velocity: 7.33038, has_acceleration_limits: true, max_acceleration: 29.3216}

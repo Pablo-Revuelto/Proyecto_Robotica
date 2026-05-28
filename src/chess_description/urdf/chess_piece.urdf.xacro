@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<!--
+Parametric chess piece for Gazebo.
+Args are passed on the xacro command line (name:=..., colour:=..., etc.).
+The file is NOT a macro; it generates a complete, standalone URDF.
+
+mesh_uri empty  → primitive cylinder fallback (always works)
+mesh_uri set    → STL mesh at scale 0.001 (mm STLs)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="chess_piece">
+
+  <xacro:arg name="name"     default="piece"/>
+  <xacro:arg name="colour"   default="white"/>
+  <xacro:arg name="mesh_uri" default=""/>
+  <xacro:arg name="height"   default="0.05"/>
+  <xacro:arg name="radius"   default="0.015"/>
+  <xacro:arg name="mass"     default="0.05"/>
+
+  <!-- Convert string args to numbers for arithmetic expressions. -->
+  <xacro:property name="nm"  value="$(arg name)"/>
+  <xacro:property name="col" value="$(arg colour)"/>
+  <xacro:property name="mu"  value="$(arg mesh_uri)"/>
+  <xacro:property name="h"   value="${float('$(arg height)')}"/>
+  <xacro:property name="r"   value="${float('$(arg radius)')}"/>
+  <xacro:property name="m"   value="${float('$(arg mass)')}"/>
+
+  <xacro:property name="rgba"
+      value="${'0.92 0.88 0.78 1' if col == 'white' else '0.10 0.10 0.10 1'}"/>
+
+  <!-- Main body -->
+  <link name="${nm}_base">
+    <inertial>
+      <mass value="${m}"/>
+      <origin xyz="0 0 ${h/2.0}" rpy="0 0 0"/>
+      <inertia
+        ixx="${(1.0/12.0)*m*(3.0*r*r + h*h)}"
+        ixy="0" ixz="0"
+        iyy="${(1.0/12.0)*m*(3.0*r*r + h*h)}"
+        iyz="0"
+        izz="${0.5*m*r*r}"/>
+    </inertial>
+
+    <xacro:if value="${mu == ''}">
+      <visual>
+        <origin xyz="0 0 ${h/2.0}" rpy="0 0 0"/>
+        <geometry><cylinder radius="${r}" length="${h}"/></geometry>
+        <material name="${nm}_mat"><color rgba="${rgba}"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${h/2.0}" rpy="0 0 0"/>
+        <geometry><cylinder radius="${r}" length="${h}"/></geometry>
+      </collision>
+    </xacro:if>
+
+    <xacro:unless value="${mu == ''}">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="${mu}" scale="0.001 0.001 0.001"/></geometry>
+        <material name="${nm}_mat"><color rgba="${rgba}"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="${mu}" scale="0.001 0.001 0.001"/></geometry>
+      </collision>
+    </xacro:unless>
+  </link>
+
+  <!-- Ferromagnetic disc on top; target of the magnetic gripper. -->
+  <link name="${nm}_magnet">
+    <inertial>
+      <mass value="0.002"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="${r*0.4}" length="0.003"/></geometry>
+      <material name="${nm}_magnet_mat"><color rgba="0.65 0.65 0.7 1.0"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="${r*0.4}" length="0.003"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="${nm}_magnet_joint" type="fixed">
+    <parent link="${nm}_base"/>
+    <child  link="${nm}_magnet"/>
+    <origin xyz="0 0 ${h + 0.0015}" rpy="0 0 0"/>
+  </joint>
+
+</robot>

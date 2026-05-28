@@ -1,0 +1,8 @@
+# Convert a transcribed voice utterance into a structured ChessMove using
+# the current board state for disambiguation.
+string utterance
+BoardState board_state
+---
+bool success
+string error
+ChessMove move

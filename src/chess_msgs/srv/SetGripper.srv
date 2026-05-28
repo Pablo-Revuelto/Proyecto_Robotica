@@ -1,0 +1,6 @@
+# Open/close a magnetic gripper on a given robot.
+string robot_name   # "white" or "black"
+bool   close        # true = engage magnet / close jaws
+---
+bool success
+string message

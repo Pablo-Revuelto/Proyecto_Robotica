@@ -1,0 +1,30 @@
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - white_arm_controller
+    - black_arm_controller
+
+  white_arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - white_joint_1
+      - white_joint_2
+      - white_joint_3
+      - white_joint_4
+      - white_joint_5
+      - white_joint_6
+
+  black_arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - black_joint_1
+      - black_joint_2
+      - black_joint_3
+      - black_joint_4
+      - black_joint_5
+      - black_joint_6

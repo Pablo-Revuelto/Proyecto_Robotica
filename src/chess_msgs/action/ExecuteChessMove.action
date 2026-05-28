@@ -1,0 +1,10 @@
+# High-level action: ask chess_motion to physically perform a chess move
+# (pick + place, including captures) with the appropriate robot.
+ChessMove move
+---
+bool success
+string error
+---
+string phase            # "planning", "approach_from", "grasp", "lift",
+                        # "transport", "place", "release", "retreat", "done"
+float32 progress        # 0..1

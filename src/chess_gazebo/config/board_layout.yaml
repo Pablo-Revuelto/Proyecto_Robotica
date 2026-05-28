@@ -1,0 +1,28 @@
+# Physical layout of the chess board in world coordinates.
+# The board centre is the world origin (0,0). +X faces the black robot,
+# +Y faces "out of the board" (to the operator's left when looking from white).
+# Each square is `square_size` meters wide; ranks 1..8 are along +X (positive
+# towards black). Files a..h are along -Y so that file 'a' is on the white robot's
+# left (matches a standard board orientation, white on rank 1).
+
+board_size: 0.40           # meters, edge-to-edge of the playing area
+square_size: 0.05          # board_size / 8
+board_z: 0.02              # top of the board (table top + board thickness)
+board_centre: [0.0, 0.0]
+
+# Where each robot expects to grasp from (height of magnet tip above board).
+approach_clearance: 0.08   # safe distance above piece when transiting
+grasp_clearance: 0.005     # additional Z above piece magnet to grasp
+
+# Standard initial chess position in FEN.
+initial_fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+# Per-piece geometry. Heights are intentionally piece-aware so the magnetic
+# gripper knows the grasp Z. mesh_uri is empty → fallback primitive in URDF.
+pieces:
+  pawn:   {height: 0.045, radius: 0.012, mass: 0.020, mesh_uri: "package://chess_description/meshes/pieces/WCC_Pawn.stl"}
+  rook:   {height: 0.055, radius: 0.014, mass: 0.030, mesh_uri: "package://chess_description/meshes/pieces/WCC_Rook.stl"}
+  knight: {height: 0.060, radius: 0.014, mass: 0.030, mesh_uri: "package://chess_description/meshes/pieces/WCC_Knight.stl"}
+  bishop: {height: 0.065, radius: 0.013, mass: 0.030, mesh_uri: "package://chess_description/meshes/pieces/WCC_Bishop.stl"}
+  queen:  {height: 0.080, radius: 0.015, mass: 0.040, mesh_uri: "package://chess_description/meshes/pieces/WCC_Queen.stl"}
+  king:   {height: 0.085, radius: 0.015, mass: 0.040, mesh_uri: "package://chess_description/meshes/pieces/WCC_King.stl"}

@@ -86,6 +86,23 @@ def square_world_xy(file: int, rank: int, square_size: float,
 
 # ---- xacro / gz spawn ---------------------------------------------------
 
+def _resolve_mesh_uri(uri: str) -> str:
+    """Convert package:// URI to file:// absolute path so Gazebo can find the mesh.
+
+    Gazebo Harmonic's URDF importer rewrites package:// to model://, which then
+    requires GZ_SIM_RESOURCE_PATH to be set. Using file:// avoids this entirely.
+    """
+    if not uri.startswith("package://"):
+        return uri
+    rest = uri[len("package://"):]
+    pkg, _, rel = rest.partition("/")
+    try:
+        share = get_package_share_directory(pkg)
+        return f"file://{share}/{rel}"
+    except Exception:
+        return uri
+
+
 def render_piece_sdf(piece_xacro: Path, name: str, color: str,
                      geometry: dict) -> str:
     """Render the chess_piece xacro into a URDF string (Gazebo accepts URDF)."""
@@ -104,43 +121,32 @@ def render_piece_sdf(piece_xacro: Path, name: str, color: str,
 
 def gz_spawn(world: str, model_name: str, urdf_str: str,
              x: float, y: float, z: float, timeout_s: float = 5.0) -> bool:
-    """Call the Gazebo `/world/<world>/create` service with a URDF/SDF string."""
-    pose = f"position: {{x: {x}, y: {y}, z: {z}}}"
-    request = (
-        f'sdf_filename: "", '
-        f'name: "{model_name}", '
-        f'pose: {{{pose}}}, '
-        f'allow_renaming: true, '
-        f'sdf: "{urdf_str.replace(chr(34), chr(39))}"'
-    )
-    # Use a temp file rather than escaping the SDF: cleanest and most reliable.
+    """Call the Gazebo `/world/<world>/create` service via a temp URDF file.
+
+    The temp file is NOT deleted immediately: Gazebo Harmonic queues the
+    EntityFactory request and reads sdf_filename asynchronously after returning
+    the service response, so deleting before it reads causes Error Code 1.
+    Files accumulate in /tmp but are tiny (~5 KB each) and cleared on reboot.
+    """
     with tempfile.NamedTemporaryFile("w", suffix=".urdf", delete=False) as fh:
         fh.write(urdf_str)
         urdf_path = fh.name
-    try:
-        req = (
-            f'sdf_filename: "{urdf_path}", '
-            f'name: "{model_name}", '
-            f'pose: {{position: {{x: {x}, y: {y}, z: {z}}}}}, '
-            f'allow_renaming: false'
-        )
-        cmd = [
-            "gz", "service",
-            "-s", f"/world/{world}/create",
-            "--reqtype", "gz.msgs.EntityFactory",
-            "--reptype", "gz.msgs.Boolean",
-            "--timeout", str(int(timeout_s * 1000)),
-            "--req", req,
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            return False
-        return "data: true" in r.stdout
-    finally:
-        try:
-            os.unlink(urdf_path)
-        except OSError:
-            pass
+    req = (
+        f'sdf_filename: "{urdf_path}", '
+        f'name: "{model_name}", '
+        f'pose: {{position: {{x: {x}, y: {y}, z: {z}}}}}, '
+        f'allow_renaming: false'
+    )
+    cmd = [
+        "gz", "service",
+        "-s", f"/world/{world}/create",
+        "--reqtype", "gz.msgs.EntityFactory",
+        "--reptype", "gz.msgs.Boolean",
+        "--timeout", str(int(timeout_s * 1000)),
+        "--req", req,
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    return r.returncode == 0 and "data: true" in r.stdout
 
 
 # ---- ROS node -----------------------------------------------------------
@@ -180,7 +186,10 @@ class ChessPieceSpawner(Node):
 
         ok = 0
         for placement in parse_fen_placement(fen):
-            geometry = pieces_cfg[placement.piece]
+            raw_geom = pieces_cfg[placement.piece]
+            # Resolve package:// to file:// so Gazebo finds the mesh directly.
+            geometry = {**raw_geom,
+                        "mesh_uri": _resolve_mesh_uri(raw_geom.get("mesh_uri", ""))}
             x, y = square_world_xy(placement.file, placement.rank, square_size, centre)
             name = f"{placement.color}_{placement.piece}_{placement.square}"
             urdf = render_piece_sdf(piece_xacro, name, placement.color, geometry)

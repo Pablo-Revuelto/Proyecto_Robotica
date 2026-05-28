@@ -165,16 +165,30 @@ ros2 launch chess_bringup chess_sim_only.launch.py
 
 ### B) Full stack (voice + perception + brain + motion)
 
-```bash
-# If you want to use the HuggingFace LLM endpoint:
-export HUGGINGFACEHUB_API_TOKEN=...
+All default parameters are managed from the central configuration file in `src/chess_voice/config/params.yaml`.
 
+To use the HuggingFace LLM endpoint seamlessly without manual exports, edit `src/chess_voice/config/params.yaml` and set your API token:
+
+```yaml
+chess_voice_parser:
+  ros__parameters:
+    huggingface_api_token: "your_token_here"
+```
+
+Then, simply run:
+
+```bash
+ros2 launch chess_bringup chess_full.launch.py
+```
+
+If you still need to override parameters dynamically on the command line (e.g. to change the model or device):
+
+```bash
 ros2 launch chess_bringup chess_full.launch.py \
     use_llm:=true \
     llm_model_id:=meta-llama/Meta-Llama-3-8B-Instruct \
     whisper_model:=openai/whisper-small \
-    whisper_device:=cpu \
-    yolo_weights:=/abs/path/to/best.pt
+    whisper_device:=cpu
 ```
 
 Speak: *"peón de e2 a e4"* / *"caballo a f3"* / *"enroque corto"* /

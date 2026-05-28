@@ -434,14 +434,30 @@ Observa cómo el robot blanco recoge el peón y lo mueve.
 
 ### 7.3 Modo completo (voz + LLM + percepción)
 
+Todos los parámetros se gestionan por defecto desde el archivo de configuración central en `src/chess_voice/config/params.yaml`.
+
+Para usar el LLM de Hugging Face de forma transparente sin declarar variables en el terminal, edite `src/chess_voice/config/params.yaml` e introduzca su clave de API:
+
+```yaml
+chess_voice_parser:
+  ros__parameters:
+    huggingface_api_token: "tu_token_aqui"
+```
+
+A continuación, simplemente ejecute:
+
 ```bash
-export HUGGINGFACEHUB_API_TOKEN=hf_xxx     # si vas a usar LLM
+ros2 launch chess_bringup chess_full.launch.py
+```
+
+Si aún desea sobrescribir parámetros dinámicamente desde la línea de comandos (por ejemplo, para cambiar de modelo o dispositivo), puede hacerlo del siguiente modo:
+
+```bash
 ros2 launch chess_bringup chess_full.launch.py \
     use_llm:=true \
     llm_model_id:=meta-llama/Meta-Llama-3-8B-Instruct \
     whisper_model:=openai/whisper-small \
-    whisper_device:=cpu \
-    yolo_weights:=$HOME/Robotica_inteligente/ros2_ws/src/chess_perception/models/best.pt
+    whisper_device:=cpu
 ```
 
 Habla cerca del micrófono. La pipeline:

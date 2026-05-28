@@ -1,0 +1,21 @@
+chess_board_state_estimator:
+  ros__parameters:
+    # YOLO model weights path — resuelto automáticamente por el launch file.
+    # Solo sobreescribir si se quiere usar un .pt diferente (ruta absoluta).
+    yolo_weights: ""
+    conf_threshold: 0.4
+
+    # Overhead camera intrinsics
+    camera_height: 1.2        # metres above board plane
+    hfov: 1.2                 # horizontal field of view, radians
+    image_width: 1280
+    image_height: 720
+
+    # Board geometry (must match chess_brain/board_geometry)
+    square_size: 0.05         # metres per square
+    board_z: 0.02             # board surface height in world frame
+    board_centre_x: 0.0
+    board_centre_y: 0.0
+
+    # Publishing
+    publish_rate: 5.0         # Hz

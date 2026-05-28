@@ -25,10 +25,17 @@ class VoiceParserNode(Node):
         super().__init__("chess_voice_parser")
         self.declare_parameter("use_llm",         True)
         self.declare_parameter("llm_model_id",    "meta-llama/Meta-Llama-3-8B-Instruct")
+        self.declare_parameter("llm_temperature", 0.0)
+        self.declare_parameter("huggingface_api_token", "")
         self.declare_parameter("square_size",     0.05)
         self.declare_parameter("board_z",         0.02)
         self.declare_parameter("board_centre_x",  0.0)
         self.declare_parameter("board_centre_y",  0.0)
+
+        hf_token = self.get_parameter("huggingface_api_token").get_parameter_value().string_value
+        if hf_token:
+            import os
+            os.environ["HUGGINGFACEHUB_API_TOKEN"] = hf_token
 
         ss = self.get_parameter("square_size").value
         bz = self.get_parameter("board_z").value
@@ -43,8 +50,9 @@ class VoiceParserNode(Node):
     def _select_parser(self) -> MoveParser:
         if self.get_parameter("use_llm").value:
             model_id = self.get_parameter("llm_model_id").get_parameter_value().string_value
-            self.get_logger().info(f"Using LangChain LLM parser: {model_id}")
-            return LangChainLLMParser(model_id=model_id)
+            temperature = float(self.get_parameter("llm_temperature").value)
+            self.get_logger().info(f"Using LangChain LLM parser: {model_id} (temperature={temperature})")
+            return LangChainLLMParser(model_id=model_id, temperature=temperature)
         self.get_logger().info("Using regex fallback parser.")
         return RegexFallbackParser()
 

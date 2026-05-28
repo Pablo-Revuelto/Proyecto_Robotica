@@ -1,0 +1,26 @@
+chess_audio_capture:
+  ros__parameters:
+    sample_rate: 16000
+    block_ms: 30
+    start_rms: 0.02
+    end_rms: 0.012
+    silence_ms: 700
+    max_utterance_s: 12.0
+    device: ""
+
+chess_whisper_asr:
+  ros__parameters:
+    model: "openai/whisper-small"
+    language: "spanish"
+    device: "cpu"
+
+chess_voice_parser:
+  ros__parameters:
+    use_llm: true
+    llm_model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
+    llm_temperature: 0.0
+    huggingface_api_token: ""
+    square_size: 0.05
+    board_z: 0.02
+    board_centre_x: 0.0
+    board_centre_y: 0.0

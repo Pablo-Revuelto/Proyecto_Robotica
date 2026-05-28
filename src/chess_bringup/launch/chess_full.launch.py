@@ -25,12 +25,17 @@ def generate_launch_description() -> LaunchDescription:
     enable_voice   = LaunchConfiguration("enable_voice")
     enable_vision  = LaunchConfiguration("enable_vision")
 
+    default_yolo_weights = PathJoinSubstitution([
+        FindPackageShare("chess_perception"),
+        "models",
+        "best.pt"
+    ])
+
     args = [
         DeclareLaunchArgument("use_llm",        default_value="true"),
         DeclareLaunchArgument("llm_model_id",
                               default_value="meta-llama/Meta-Llama-3-8B-Instruct"),
-        DeclareLaunchArgument("yolo_weights",
-                              default_value="~/Robotica_inteligente/ros2_ws/best.pt"),
+        DeclareLaunchArgument("yolo_weights",   default_value=default_yolo_weights),
         DeclareLaunchArgument("whisper_model",  default_value="openai/whisper-small"),
         DeclareLaunchArgument("whisper_device", default_value="cpu"),
         DeclareLaunchArgument("enable_voice",   default_value="true"),
@@ -63,15 +68,25 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[{"use_sim_time": True}],
     )
 
+    # Path to central parameters file in chess_voice
+    chess_voice_params = PathJoinSubstitution([
+        FindPackageShare("chess_voice"),
+        "config",
+        "params.yaml"
+    ])
+
     # voice_parser is always-on: the regex fallback works without an LLM token.
     voice_parser = Node(
         package="chess_voice", executable="voice_parser",
         output="screen",
-        parameters=[{
-            "use_llm": use_llm,
-            "llm_model_id": llm_model_id,
-            "use_sim_time": True,
-        }],
+        parameters=[
+            chess_voice_params,
+            {
+                "use_llm": use_llm,
+                "llm_model_id": llm_model_id,
+                "use_sim_time": True,
+            }
+        ],
     )
 
     # Mic + Whisper only when enable_voice:=true
@@ -79,18 +94,24 @@ def generate_launch_description() -> LaunchDescription:
         package="chess_voice", executable="whisper_asr",
         output="screen",
         condition=IfCondition(enable_voice),
-        parameters=[{
-            "model": whisper_model,
-            "device": whisper_device,
-            "use_sim_time": True,
-        }],
+        parameters=[
+            chess_voice_params,
+            {
+                "model": whisper_model,
+                "device": whisper_device,
+                "use_sim_time": True,
+            }
+        ],
     )
 
     mic = Node(
         package="chess_voice", executable="audio_capture",
         output="screen",
         condition=IfCondition(enable_voice),
-        parameters=[{"use_sim_time": True}],
+        parameters=[
+            chess_voice_params,
+            {"use_sim_time": True}
+        ],
     )
 
     # Vision node only when enable_vision:=true

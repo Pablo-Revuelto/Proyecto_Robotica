@@ -19,7 +19,7 @@ chess_voice_parser:
     use_llm: true
     llm_model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
     llm_temperature: 0.0
-    huggingface_api_token: "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"
+    huggingface_api_token: ""
     square_size: 0.05
     board_z: 0.02
     board_centre_x: 0.0

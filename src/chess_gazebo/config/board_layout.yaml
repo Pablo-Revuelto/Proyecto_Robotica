@@ -14,8 +14,11 @@ board_centre: [0.0, 0.0]
 approach_clearance: 0.08   # safe distance above piece when transiting
 grasp_clearance: 0.005     # additional Z above piece magnet to grasp
 
-# Standard initial chess position in FEN.
-initial_fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+# Reduced 6-piece end-game position (3 per side) to lower the vertex/spawn cost.
+# Each side has: king, bishop, pawn (no queens, rooks or knights). Legal &
+# sensible (K+B+P endgame, both kings on g-file, white to move, no checks; each
+# bishop is blocked by its own e-pawn so neither king is in check).
+initial_fen: "6k1/8/3b4/4p3/4P3/3B4/8/6K1 w - - 0 25"
 
 # Per-piece geometry. Heights are intentionally piece-aware so the magnetic
 # gripper knows the grasp Z. mesh_uri is empty → fallback primitive in URDF.

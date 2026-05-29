@@ -1,0 +1,271 @@
+\documentclass{beamer}
+
+\usepackage{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+
+% --- Paquetes para diseño ---
+\usepackage{latexsym,amsmath,xcolor,multicol,booktabs,calligra}
+\usepackage{graphicx,listings,stackengine,tikz}
+
+% --- Definición de Cajas Personalizadas ---
+\newenvironment{cajaazul}[1]{%
+    \setbeamercolor{block title}{bg=cyan!70!black, fg=white}
+    \setbeamercolor{block body}{bg=cyan!10!white, fg=black}
+    \begin{block}{#1}}{\end{block}}
+
+\newenvironment{cajaverde}[1]{%
+    \setbeamercolor{block title}{bg=teal!80!black, fg=white}
+    \setbeamercolor{block body}{bg=teal!10!white, fg=black}
+    \begin{block}{#1}}{\end{block}}
+
+\newenvironment{cajaranja}[1]{%
+    \setbeamercolor{block title}{bg=orange!90!black, fg=white}
+    \setbeamercolor{block body}{bg=orange!10!white, fg=black}
+    \begin{block}{#1}}{\end{block}}
+
+% --- DATOS DEL PROYECTO ---
+\author{Juan Pedro García Sanz \and Pablo Revuelto de Miguel \and \\ Adolfo Peña Marín}
+\title{Práctica 1 --- Simulación del Agilex Tracer}
+\subtitle{Gazebo Harmonic + ROS\,2 Jazzy}
+\institute{Robótica Inteligente \\ Universidad Loyola Andalucía}
+
+% El logo se añade aquí, justo encima de la fecha con un salto de línea
+\date{\includegraphics[height=1cm]{logo.png} \\[0.2cm] \today}
+
+% --- TU TEMA PERSONALIZADO ---
+\usepackage{CNU}
+\usefonttheme{professionalfonts}
+\usepackage{lmodern}
+
+% --- Colores para código ---
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+\definecolor{halfgray}{gray}{0.55}
+
+\newcommand{\completar}[1]{\textcolor{halfgray}{\textit{[#1]}}}
+
+\begin{document}
+
+% --- PORTADA ---
+\begin{frame}
+    \titlepage
+\end{frame}
+
+% ============================================================
+% ÍNDICE
+% ============================================================
+\begin{frame}{Índice}
+    \tableofcontents[hideallsubsections]
+\end{frame}
+
+% ============================================================
+% Objetivo y alcance
+% ============================================================
+\section{Objetivo y Alcance}
+\begin{frame}{Qué hemos construido}
+
+\begin{cajaazul}{Entregables de la práctica}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Mundo SDF}: física, fricción regulable y obstáculos.
+    \item \textbf{Robot}: Agilex Tracer (diferencial) con IMU, LiDAR 2D y cámara.
+    \item \textbf{Integración ROS 2}: puente de teleop, odometría, TF y RViz 2.
+    \item \textbf{Experimento D1}: análisis de paso de solver y fricción.
+\end{itemize}
+\end{cajaazul}
+
+\begin{cajaverde}{Entorno de software}
+\textbf{ROS 2 Jazzy} + \textbf{Gazebo Harmonic}. Plugins migrados de \texttt{ignition-gazebo-*} a \texttt{gz-sim-*}.
+\end{cajaverde}
+
+\end{frame}
+
+% ============================================================
+% Parte A: Mundo y Robot
+% ============================================================
+\section{Mundo SDF y Robot (URDF)}
+\begin{frame}{Configuración del Mundo SDF}
+
+\begin{cajaazul}{Plugins y Física (gz-sim)}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Sistemas}: \texttt{physics}, \texttt{user-commands}, \texttt{scene-broadcaster}, \texttt{sensors} (render Ogre2), \texttt{imu} y \texttt{contact}.
+    \item \textbf{Física}: bloque \texttt{<physics>} regulable (base del experimento D1).
+    \item \textbf{Suelo}: fricción configurable vía \texttt{<surface><friction><ode>}.
+\end{itemize}
+\end{cajaazul}
+
+\begin{cajaverde}{Obstáculos, cámara inicial y validación}
+Paredes (4 ext. + 3 int.), cajas, mesa y paso estrecho (estáticos con colisión). Bloque \texttt{<gui><camera>} con pose inicial elevada/diagonal. Validado mediante comando \texttt{gz sdf -k} $\rightarrow$ \textit{Valid.}
+\end{cajaverde}
+
+\end{frame}
+
+% ============================================================
+% Parte B: Robot
+% ============================================================
+\begin{frame}{Estructura del Robot}
+
+\begin{cajaazul}{Distribución física (6 ruedas y chasis)}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Actuación}: 2 ruedas motrices centrales (\texttt{diff-drive}).
+    \item \textbf{Estabilidad}: 4 castors pasivos en las esquinas como anti-vuelco.
+    \item \textbf{Estructura}: chasis (\texttt{base\_link}) y soporte para sensores.
+\end{itemize}
+\end{cajaazul}
+
+\begin{cajaverde}{Árbol de transformadas (TF)}
+\textbf{Estáticas}: publicadas por \texttt{robot\_state\_publisher}.\\
+\textbf{Dinámicas}: publicadas por el plugin de juntas del robot para RViz 2.
+\end{cajaverde}
+
+\end{frame}
+
+\begin{frame}{Correcciones en el URDF Original}
+
+\begin{cajaranja}{Bug crítico: eje invertido en rueda izquierda}
+Llevaba \texttt{rpy="3.14 0 0"} $\rightarrow$ invertía su eje físico de rotación. Al avanzar, las ruedas giraban en sentido opuesto y el robot rotaba sobre sí mismo.
+\end{cajaranja}
+
+\begin{cajaverde}{Correcciones geométricas y dinámicas}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Medidas reales} del Tracer: separación ($0.34$\,m) y radio ($0.059$\,m). Nota: chasis 30\,kg y diámetro 0.118\,m se apartan del rango sugerido como ``p.\,ej.'' en B1 (5--15\,kg, 0.2\,m), pero corresponden al robot real.
+    \item \textbf{Contactos}: rodadura con cilindro primitivo. Castor con $\mu=0.05$ para permitir el deslizamiento lateral en los giros.
+    \item \textbf{Estabilidad}: altura de ruedas calibrada ($z=-0.085$\,m) e inercias coherentes (caja para chasis, cilindro para ruedas).
+\end{itemize}
+\end{cajaverde}
+
+\end{frame}
+
+% ============================================================
+% Parte C: Sensores e Integración
+% ============================================================
+\section{Sensores e Integración ROS 2}
+\begin{frame}{Sensores Embarcados}
+
+\begin{cajaazul}{Especificaciones técnicas}
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Sensor} & \textbf{Frame} & \textbf{Tópico ROS} \\
+\midrule
+IMU (100\,Hz)                       & \texttt{imu\_link}    & \texttt{/imu} \\
+LiDAR 2D (FOV $270^\circ$, 12\,m)  & \texttt{lidar\_link}  & \texttt{/scan} \\
+Cámara ($640\times480$, 30\,Hz)     & \texttt{camera\_link} & \texttt{/camera/image\_raw} \\
+Contacto (evento al golpear)        & \texttt{base\_link}   & \texttt{/contacts} \\
+\bottomrule
+\end{tabular}
+\end{cajaazul}
+
+\begin{cajaverde}{Verificación y nota extra}
+\texttt{frame\_id} correctos en todos los sensores. LiDAR y cámara estables en RViz 2. El sensor de \textbf{contacto} cubre el objetivo 3 del enunciado y la extensión \#2 (sección 14).
+\end{cajaverde}
+
+\end{frame}
+
+\begin{frame}{Puente e Integración ROS 2}
+
+\begin{cajaazul}{Comunicación bidireccional (\texttt{ros\_gz\_bridge})}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Actuación}: puente de velocidad en \texttt{/cmd\_vel}.
+    \item \textbf{Feedback}: odometría (\texttt{/odom}), estados de juntas (\texttt{/joint\_states}), TF, IMU (\texttt{/imu}), LiDAR (\texttt{/scan}), cámara y \texttt{/contacts}.
+    \item \textbf{Control}: teleoperación por teclado y visualización completa en RViz 2.
+\end{itemize}
+\end{cajaazul}
+
+\begin{cajaverde}{Corrección en el Lanzador (ROS 2 Jazzy)}
+Envoltura de la descripción en \texttt{ParameterValue} para corregir el fallo de lectura YAML de Jazzy. Exportación automatizada de \texttt{GZ\_SIM\_RESOURCE\_PATH}.
+\end{cajaverde}
+
+\end{frame}
+
+% ============================================================
+% Parte D: Experimento físico (D1)
+% ============================================================
+\section{Experimento Físico (D1)}
+\begin{frame}{Experimento D1: Planificación}
+
+\begin{cajaazul}{Configuraciones de la simulación}
+\centering\small
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Corrida} & \textbf{Hipótesis} & $\mu$ Suelo & Paso (s) \\
+\midrule
+E1 fricción baja & Patina en giros & 0.05 & 0.001 \\
+E2 fricción alta & Giro nominal estable & 1.0  & 0.001 \\
+E3 paso grande & Inestabilidad del solver & 1.0  & 0.01  \\
+\bottomrule
+\end{tabular}
+\end{cajaazul}
+
+\begin{cajaverde}{Trayectoria de control idéntica}
+Avance recto (3\,s) seguido de un giro a la izquierda (5\,s).
+\end{cajaverde}
+
+\end{frame}
+
+\begin{frame}{Experimento D1: Resultados}
+
+\begin{cajaazul}{Tabla comparativa}
+\centering\footnotesize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Corrida} & \textbf{Patina} & \textbf{Estable} & \textbf{Sensores} \\
+\midrule
+E1 --- fricción baja ($\mu{=}0.05$) & No & Sí & OK \\
+E2 --- fricción alta ($\mu{=}1.0$)  & No & Sí & OK \\
+E3 --- paso grande (step$=0.01$)    & No & Sí & OK \\
+\bottomrule
+\end{tabular}
+\end{cajaazul}
+
+\begin{cajaranja}{Conclusiones físicas}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{E1 vs E2}: E2 describe un arco más cerrado — con mayor agarre el giro es más preciso.
+    \item \textbf{E3}: paso grande no inestabiliza porque la dinámica del robot es suave.
+\end{itemize}
+\end{cajaranja}
+
+\end{frame}
+
+% ============================================================
+% Anexo: migración Classic -> Sim
+% ============================================================
+\section{Anexo y Conclusiones}
+\begin{frame}{Anexo: Migración Classic a Sim (Harmonic)}
+
+\begin{cajaazul}{Cambios en Plugins y Mallas}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Sistemas}: migración de plugins antiguos a \texttt{gz-sim-*-system}. Control diff-drive directo en el bloque \texttt{<gazebo>}.
+    \item \textbf{Visuales}: mallas resueltas vía \texttt{model://} con \texttt{GZ\_SIM\_RESOURCE\_PATH} apuntando al directorio raíz de modelos.
+\end{itemize}
+\end{cajaazul}
+
+\begin{cajaverde}{Tópicos y Lanzadores}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Puente}: mapeo explícito de tópicos a través de \texttt{ros\_gz\_bridge}.
+    \item \textbf{Lanzador en Jazzy}: uso de \texttt{ParameterValue} para la carga de descripción y corrección de errores de análisis YAML.
+\end{itemize}
+\end{cajaverde}
+
+\end{frame}
+
+\begin{frame}{Conclusiones}
+
+\begin{cajaazul}{Logros clave de la práctica}
+\begin{itemize}\setlength{\itemsep}{0pt}
+    \item \textbf{Entorno robusto}: simulación totalmente funcional en ROS 2 Jazzy y Gazebo Harmonic.
+    \item \textbf{Correcciones URDF}: resueltos problemas de inversión de eje, dimensiones y fricción de las ruedas.
+    \item \textbf{Experimento físico}: comprobación del impacto de la fricción y el paso del solver.
+    \item \textbf{Migración documentada}: guía práctica de Classic a Sim.
+\end{itemize}
+\end{cajaazul}
+
+\begin{center}
+\Large \textbf{¿Preguntas?}
+\end{center}
+
+\end{frame}
+
+\end{document}

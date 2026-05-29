@@ -1,9 +1,14 @@
 """Launch the entire dual-arm chess stack.
 
-Modes controlled by launch args:
+All node tuning (LLM on/off, LLM model, YOLO weights, Whisper model/device,
+camera + board geometry, ...) lives in each package's `config/params.yaml`:
+  - chess_voice/config/params.yaml       (voice_parser, whisper_asr, audio_capture)
+  - chess_perception/config/params.yaml  (board_state_estimator)
+Edit those files to configure the system; no command-line arguments needed.
+
+The only launch-level switches are which subsystems to start at all:
   enable_voice:=false   skip mic / whisper / audio capture (text-only testing)
   enable_vision:=false  skip the YOLO board estimator
-  use_llm:=false        use regex fallback parser instead of LLM (fast dev)
 """
 
 from launch import LaunchDescription
@@ -17,30 +22,21 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
-    use_llm        = LaunchConfiguration("use_llm")
-    llm_model_id   = LaunchConfiguration("llm_model_id")
-    yolo_weights   = LaunchConfiguration("yolo_weights")
-    whisper_model  = LaunchConfiguration("whisper_model")
-    whisper_device = LaunchConfiguration("whisper_device")
-    enable_voice   = LaunchConfiguration("enable_voice")
-    enable_vision  = LaunchConfiguration("enable_vision")
-
-    default_yolo_weights = PathJoinSubstitution([
-        FindPackageShare("chess_perception"),
-        "models",
-        "best.pt"
-    ])
+    enable_voice  = LaunchConfiguration("enable_voice")
+    enable_vision = LaunchConfiguration("enable_vision")
 
     args = [
-        DeclareLaunchArgument("use_llm",        default_value="true"),
-        DeclareLaunchArgument("llm_model_id",
-                              default_value="meta-llama/Meta-Llama-3-8B-Instruct"),
-        DeclareLaunchArgument("yolo_weights",   default_value=default_yolo_weights),
-        DeclareLaunchArgument("whisper_model",  default_value="openai/whisper-small"),
-        DeclareLaunchArgument("whisper_device", default_value="cpu"),
-        DeclareLaunchArgument("enable_voice",   default_value="true"),
-        DeclareLaunchArgument("enable_vision",  default_value="true"),
+        DeclareLaunchArgument("enable_voice",  default_value="true"),
+        DeclareLaunchArgument("enable_vision", default_value="true"),
     ]
+
+    # Central per-package parameter files (the single source of truth).
+    chess_voice_params = PathJoinSubstitution([
+        FindPackageShare("chess_voice"), "config", "params.yaml"
+    ])
+    chess_perception_params = PathJoinSubstitution([
+        FindPackageShare("chess_perception"), "config", "params.yaml"
+    ])
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -71,61 +67,35 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[{"use_sim_time": True}],
     )
 
-    # Path to central parameters file in chess_voice
-    chess_voice_params = PathJoinSubstitution([
-        FindPackageShare("chess_voice"),
-        "config",
-        "params.yaml"
-    ])
-
-    # voice_parser is always-on: the regex fallback works without an LLM token.
+    # voice_parser is always-on: the regex fallback works even without an LLM.
+    # use_llm / llm_model_id / token come from chess_voice/config/params.yaml.
     voice_parser = Node(
         package="chess_voice", executable="voice_parser",
         output="screen",
-        parameters=[
-            chess_voice_params,
-            {
-                "use_llm": use_llm,
-                "llm_model_id": llm_model_id,
-                "use_sim_time": True,
-            }
-        ],
+        parameters=[chess_voice_params, {"use_sim_time": True}],
     )
 
-    # Mic + Whisper only when enable_voice:=true
+    # Mic + Whisper only when enable_voice:=true (model/device from params.yaml).
     whisper = Node(
         package="chess_voice", executable="whisper_asr",
         output="screen",
         condition=IfCondition(enable_voice),
-        parameters=[
-            chess_voice_params,
-            {
-                "model": whisper_model,
-                "device": whisper_device,
-                "use_sim_time": True,
-            }
-        ],
+        parameters=[chess_voice_params, {"use_sim_time": True}],
     )
 
     mic = Node(
         package="chess_voice", executable="audio_capture",
         output="screen",
         condition=IfCondition(enable_voice),
-        parameters=[
-            chess_voice_params,
-            {"use_sim_time": True}
-        ],
+        parameters=[chess_voice_params, {"use_sim_time": True}],
     )
 
-    # Vision node only when enable_vision:=true
+    # Vision node only when enable_vision:=true (yolo_weights from params.yaml).
     vision = Node(
         package="chess_perception", executable="board_state_estimator",
         output="screen",
         condition=IfCondition(enable_vision),
-        parameters=[{
-            "yolo_weights": yolo_weights,
-            "use_sim_time": True,
-        }],
+        parameters=[chess_perception_params, {"use_sim_time": True}],
     )
 
     return LaunchDescription(args + [

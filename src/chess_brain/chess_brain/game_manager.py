@@ -105,6 +105,19 @@ class GameManager(Node):
 
     # ---- Pipeline ------------------------------------------------------
 
+    def _wait_for_future(self, future, timeout_sec: float) -> bool:
+        """Block until `future` is done WITHOUT spinning this node.
+
+        The pipeline runs in a worker thread while main() already spins the
+        node; calling rclpy.spin_until_future_complete(self, ...) here re-spins
+        the same node from a second thread, which is racy and intermittently
+        never completes the future ("Voice parser timed out"). Waiting on a
+        done-callback lets the main executor deliver the result instead.
+        """
+        done = threading.Event()
+        future.add_done_callback(lambda _f: done.set())
+        return done.wait(timeout_sec)
+
     def _handle_utterance(self, text: str) -> None:
         if not self._parse_client.wait_for_service(timeout_sec=2.0):
             self.get_logger().error("Voice parser service unavailable.")
@@ -115,8 +128,7 @@ class GameManager(Node):
         req.board_state = self._current_state_msg()
 
         future = self._parse_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=10.0)
-        if not future.done() or future.result() is None:
+        if not self._wait_for_future(future, 10.0) or future.result() is None:
             self.get_logger().error("Voice parser timed out.")
             return
         result: ParseVoiceCommand.Response = future.result()
@@ -141,13 +153,17 @@ class GameManager(Node):
         goal = ExecuteChessMove.Goal()
         goal.move = msg
         future = self._motion_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
+        if not self._wait_for_future(future, 5.0):
+            self.get_logger().error("Motion goal timed out.")
+            return
         handle = future.result()
         if handle is None or not handle.accepted:
             self.get_logger().error("Motion goal rejected.")
             return
         result_future = handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future, timeout_sec=120.0)
+        if not self._wait_for_future(result_future, 120.0):
+            self.get_logger().error("Motion result timed out.")
+            return
         res = result_future.result()
         if res is None or not res.result.success:
             err = res.result.error if res else "no result"

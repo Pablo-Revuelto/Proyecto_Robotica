@@ -6,6 +6,10 @@ Modes controlled by launch args:
   use_llm:=false        use regex fallback parser instead of LLM (fast dev)
 """
 
+from pathlib import Path
+
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
                             TimerAction)
@@ -25,17 +29,15 @@ def generate_launch_description() -> LaunchDescription:
     enable_voice   = LaunchConfiguration("enable_voice")
     enable_vision  = LaunchConfiguration("enable_vision")
 
-    default_yolo_weights = PathJoinSubstitution([
-        FindPackageShare("chess_perception"),
-        "models",
-        "best.pt"
-    ])
-
     args = [
         DeclareLaunchArgument("use_llm",        default_value="true"),
         DeclareLaunchArgument("llm_model_id",
                               default_value="meta-llama/Meta-Llama-3-8B-Instruct"),
-        DeclareLaunchArgument("yolo_weights",   default_value=default_yolo_weights),
+        # Empty by default (matches README §6.2): perception then uses the
+        # NullDetector and publishes an empty board. An empty value cannot be
+        # passed on the CLI as `yolo_weights:=""` (ros2 launch rejects it), so
+        # the default must be empty here.
+        DeclareLaunchArgument("yolo_weights",   default_value=""),
         DeclareLaunchArgument("whisper_model",  default_value="openai/whisper-small"),
         DeclareLaunchArgument("whisper_device", default_value="cpu"),
         DeclareLaunchArgument("enable_voice",   default_value="true"),
@@ -56,16 +58,25 @@ def generate_launch_description() -> LaunchDescription:
         ])
     )
 
+    # Keep the engine (game_manager), the piece registry (move_executor) and the
+    # spawned scene (chess_gazebo) on the SAME position by reading the spawner's
+    # initial_fen from board_layout.yaml and feeding it to both nodes.
+    _board_layout = (Path(get_package_share_directory("chess_gazebo"))
+                     / "config" / "board_layout.yaml")
+    _initial_fen = yaml.safe_load(_board_layout.read_text()).get("initial_fen", "")
+
+    # move_executor is now a *client* of the running move_group (see
+    # chess_motion/move_executor_node.py), so it needs no MoveIt config of its own.
     move_executor = Node(
         package="chess_motion", executable="move_executor",
         output="screen",
-        parameters=[{"use_sim_time": True}],
+        parameters=[{"use_sim_time": True, "initial_fen": _initial_fen}],
     )
 
     game_manager = Node(
         package="chess_brain", executable="game_manager",
         output="screen",
-        parameters=[{"use_sim_time": True}],
+        parameters=[{"use_sim_time": True, "initial_fen": _initial_fen}],
     )
 
     # Path to central parameters file in chess_voice

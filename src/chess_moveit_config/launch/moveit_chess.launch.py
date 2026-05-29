@@ -3,7 +3,9 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.substitutions import Command
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from moveit_configs_utils import MoveItConfigsBuilder
@@ -15,6 +17,12 @@ def generate_launch_description() -> LaunchDescription:
 
     urdf_xacro = str(desc_share / "urdf" / "dual_irb120_chess.urdf.xacro")
     srdf_file = str(cfg_share / "config" / "chess.srdf")
+
+    # When run standalone (no Gazebo) we must publish TF and joint states
+    # ourselves; when included by chess_full, Gazebo already provides both, so
+    # the caller sets use_rsp:=false to avoid duplicate publishers.
+    use_rsp = LaunchConfiguration("use_rsp")
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
     robot_description = {
         "robot_description": ParameterValue(
@@ -34,6 +42,22 @@ def generate_launch_description() -> LaunchDescription:
         .to_moveit_configs()
     )
 
+    robot_state_publisher = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        output="screen",
+        condition=IfCondition(use_rsp),
+        parameters=[robot_description, {"use_sim_time": use_sim_time}],
+    )
+
+    joint_state_publisher = Node(
+        package="joint_state_publisher",
+        executable="joint_state_publisher",
+        output="screen",
+        condition=IfCondition(use_rsp),
+        parameters=[{"use_sim_time": use_sim_time}],
+    )
+
     move_group = Node(
         package="moveit_ros_move_group",
         executable="move_group",
@@ -41,7 +65,7 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[
             moveit_config.to_dict(),
             robot_description,
-            {"use_sim_time": True},
+            {"use_sim_time": use_sim_time},
         ],
     )
 
@@ -55,8 +79,21 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[
             moveit_config.to_dict(),
             robot_description,
-            {"use_sim_time": True},
+            {"use_sim_time": use_sim_time},
         ],
     )
 
-    return LaunchDescription([move_group, rviz])
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            "use_rsp", default_value="true",
+            description="Start robot_state_publisher + joint_state_publisher. "
+                        "Set false when an external source (e.g. Gazebo) already "
+                        "publishes TF and joint states."),
+        DeclareLaunchArgument(
+            "use_sim_time", default_value="false",
+            description="Use the simulation clock. Set true when running with Gazebo."),
+        robot_state_publisher,
+        joint_state_publisher,
+        move_group,
+        rviz,
+    ])

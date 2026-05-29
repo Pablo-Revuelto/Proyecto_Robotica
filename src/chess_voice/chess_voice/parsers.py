@@ -35,7 +35,11 @@ class MoveParser(Protocol):
 
 # ---- Regex fallback ------------------------------------------------------
 
-_SQUARE_RE = re.compile(r"\b([a-hA-H])[\s\-]?([1-8])\b")
+# No \b word boundaries: ASR often glues a letter to a square (e.g. "alfil de
+# d3 a c4" -> "Quil, DD3, AC4."), and boundaries would reject "DD3"/"AC4".
+# Any extracted candidate is still validated against legal_uci, so spurious
+# file+digit pairs that don't form a legal move are discarded.
+_SQUARE_RE = re.compile(r"([a-hA-H])[\s\-]?([1-8])")
 _PIECE_WORDS_ES = {
     "peon": "P", "peón": "P", "torre": "R", "caballo": "N", "alfil": "B",
     "dama": "Q", "reina": "Q", "rey": "K",

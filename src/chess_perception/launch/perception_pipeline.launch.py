@@ -15,7 +15,6 @@ def generate_launch_description() -> LaunchDescription:
     pkg_share = FindPackageShare("chess_perception")
 
     default_params_file = PathJoinSubstitution([pkg_share, "config", "params.yaml"])
-    default_model_path  = PathJoinSubstitution([pkg_share, "models", "best.pt"])
 
     params_file = LaunchConfiguration("params_file")
 
@@ -27,15 +26,13 @@ def generate_launch_description() -> LaunchDescription:
         ),
     ]
 
+    # All tuning (incl. yolo_weights) comes from params.yaml — no overrides here.
     board_state_estimator = Node(
         package="chess_perception",
         executable="board_state_estimator",
         name="chess_board_state_estimator",
         output="screen",
-        parameters=[
-            params_file,
-            {"yolo_weights": default_model_path},   # ruta absoluta resuelta al instalar
-        ],
+        parameters=[params_file],
     )
 
     return LaunchDescription(args + [board_state_estimator])

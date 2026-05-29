@@ -35,7 +35,11 @@ class MoveParser(Protocol):
 
 # ---- Regex fallback ------------------------------------------------------
 
-_SQUARE_RE = re.compile(r"\b([a-hA-H])[\s\-]?([1-8])\b")
+# No \b word boundaries: ASR often glues a letter to a square (e.g. "alfil de
+# d3 a c4" -> "Quil, DD3, AC4."), and boundaries would reject "DD3"/"AC4".
+# Any extracted candidate is still validated against legal_uci, so spurious
+# file+digit pairs that don't form a legal move are discarded.
+_SQUARE_RE = re.compile(r"([a-hA-H])[\s\-]?([1-8])")
 _PIECE_WORDS_ES = {
     "peon": "P", "peón": "P", "torre": "R", "caballo": "N", "alfil": "B",
     "dama": "Q", "reina": "Q", "rey": "K",
@@ -102,21 +106,31 @@ class RegexFallbackParser:
 
 # ---- LangChain LLM parser -----------------------------------------------
 
-_SYSTEM_PROMPT = """You convert spoken chess commands (Spanish or English)
-into a single UCI move. Reply with a strict JSON object: {"uci": "<uci>"}
-or {"uci": null} if the utterance is not a valid chess move.
+_SYSTEM_PROMPT = """You translate ONE spoken chess command (Spanish or English)
+into ONE move, using the position and the COMPLETE list of legal UCI moves.
 
-Context:
-- FEN: {fen}
-- Legal UCI moves (you MUST pick one of these, or null): {legal_uci}
+Rules:
+- Your answer is EITHER one string copied EXACTLY from the legal-moves list,
+  OR null. Never invent a move; never output a move outside the list.
+- Output a move ONLY when the command clearly names a destination square (and
+  optionally an origin square or a piece) matching exactly one legal move.
+- Output null when the command is vague ("move any piece", "haz una jugada"),
+  names an impossible or empty square (e.g. h9), names a piece that cannot
+  legally reach the square, or you are unsure. Do NOT guess a move just to
+  avoid null.
 
-Examples:
-  utterance: "mueve el peón de e2 a e4"   →  {{"uci": "e2e4"}}
-  utterance: "caballo a f3"                 →  {{"uci": "g1f3"}}
-  utterance: "enroque corto"                →  {{"uci": "e1g1"}}
-  utterance: "captura en d5 con la torre"   →  {{"uci": "<the legal rxd5>"}}
+Spanish piece names: peón=pawn, torre=rook, caballo=knight, alfil=bishop,
+dama/reina=queen, rey=king. UCI = origin+destination, e.g. "d3c4" = the piece
+on d3 moves to c4.
 
-Respond ONLY with the JSON object. No prose, no markdown."""
+To pick a move: find the destination square named in the command, then the
+single legal move ending there (matching the named piece/origin if given).
+
+Position (FEN): {fen}
+Legal moves (choose EXACTLY one, or null): {legal_uci}
+
+Reply with ONLY this JSON, no prose and no markdown:
+{{"uci": "<a move copied verbatim from the list>"}}   or   {{"uci": null}}"""
 
 
 class LangChainLLMParser:

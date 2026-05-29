@@ -16,7 +16,7 @@ chess_whisper_asr:
 
 chess_voice_parser:
   ros__parameters:
-    use_llm: true
+    use_llm: false
     llm_model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
     llm_temperature: 0.0
     huggingface_api_token: ""

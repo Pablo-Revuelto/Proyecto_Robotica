@@ -86,13 +86,36 @@ class YoloPieceDetector:
                 observations.append(PieceObservation(color, piece, cx, cy, float(p)))
         return observations
 
-    @staticmethod
-    def _parse_label(label: str) -> Optional[tuple]:
-        if "_" not in label:
-            return None
-        color, piece = label.split("_", 1)
-        if color not in ("white", "black"):
-            return None
-        if piece not in ("pawn", "knight", "bishop", "rook", "queen", "king"):
-            return None
-        return color, piece
+    # Short-code label scheme (e.g. weights_v4.pt): "wP", "bK", ...
+    _SHORT_COLOR = {"w": "white", "b": "black"}
+    _SHORT_PIECE = {
+        "p": "pawn", "n": "knight", "b": "bishop",
+        "r": "rook", "q": "queen", "k": "king",
+    }
+    _PIECES = ("pawn", "knight", "bishop", "rook", "queen", "king")
+
+    @classmethod
+    def _parse_label(cls, label: str) -> Optional[tuple]:
+        """Map a YOLO class name to (color, piece).
+
+        Accepts the three label schemes seen across our trained models:
+          * "white_pawn" / "black_king"   (underscore, full words)
+          * "white-pawn" / "black-king"   (hyphen, full words)
+          * "wP" / "bK"                    (short codes, K=king/N=knight)
+        Returns None for anything that doesn't map to a valid piece.
+        """
+        # Full-word schemes, separated by "_" or "-".
+        for sep in ("_", "-"):
+            if sep in label:
+                color, piece = label.split(sep, 1)
+                color, piece = color.lower(), piece.lower()
+                if color in ("white", "black") and piece in cls._PIECES:
+                    return color, piece
+                return None
+        # Short-code scheme: 2 chars, e.g. "wP".
+        if len(label) == 2:
+            color = cls._SHORT_COLOR.get(label[0].lower())
+            piece = cls._SHORT_PIECE.get(label[1].lower())
+            if color and piece:
+                return color, piece
+        return None

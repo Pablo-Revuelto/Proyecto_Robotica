@@ -13,6 +13,9 @@
   <exec_depend>moveit_py</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>tf_transformations</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>moveit_msgs</exec_depend>
+  <exec_depend>shape_msgs</exec_depend>
   <exec_depend>chess_msgs</exec_depend>
   <exec_depend>chess_brain</exec_depend>
 

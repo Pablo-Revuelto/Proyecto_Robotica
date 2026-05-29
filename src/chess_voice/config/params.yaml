@@ -16,9 +16,12 @@ chess_whisper_asr:
 
 chess_voice_parser:
   ros__parameters:
-    use_llm: false
+    use_llm: true
     llm_model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
     llm_temperature: 0.0
+    # Token NOT stored here (keep empty). It is read from the HF cache
+    # (`huggingface-cli login` -> ~/.cache/huggingface/token) or the
+    # HUGGINGFACEHUB_API_TOKEN env var. Do NOT commit a token into this file.
     huggingface_api_token: ""
     square_size: 0.05
     board_z: 0.02

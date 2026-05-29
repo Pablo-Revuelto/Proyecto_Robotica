@@ -1,8 +1,9 @@
 chess_board_state_estimator:
   ros__parameters:
-    # YOLO model weights — fuente de verdad para los launch files.
-    # Ruta absoluta al .pt; dejar "" para usar NullDetector (tablero vacío).
-    yolo_weights: "/home/juanpe/Escritorio/Proyecto_Robotica/src/chess_perception/models/best.pt"
+
+    # YOLO model weights path — resuelto automáticamente por el launch file.
+    # Solo sobreescribir si se quiere usar un .pt diferente (ruta absoluta).
+    yolo_weights: "Proyecto_Robotica/src/chess_perception/models/best.pt"
     conf_threshold: 0.4
 
     # Overhead camera intrinsics

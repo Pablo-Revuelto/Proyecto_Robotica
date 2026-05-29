@@ -49,7 +49,10 @@ def generate_launch_description() -> LaunchDescription:
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([FindPackageShare("chess_moveit_config"), "launch",
                                   "moveit_chess.launch.py"])
-        ])
+        ]),
+        # Gazebo already publishes TF (robot_state_publisher) and joint states,
+        # so MoveIt must not start its own to avoid duplicate /tf publishers.
+        launch_arguments={"use_rsp": "false", "use_sim_time": "true"}.items(),
     )
 
     move_executor = Node(

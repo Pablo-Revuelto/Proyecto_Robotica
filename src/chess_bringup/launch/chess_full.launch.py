@@ -11,6 +11,10 @@ The only launch-level switches are which subsystems to start at all:
   enable_vision:=false  skip the YOLO board estimator
 """
 
+from pathlib import Path
+
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
                             TimerAction)
@@ -22,12 +26,27 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
-    enable_voice  = LaunchConfiguration("enable_voice")
-    enable_vision = LaunchConfiguration("enable_vision")
+    use_llm        = LaunchConfiguration("use_llm")
+    llm_model_id   = LaunchConfiguration("llm_model_id")
+    yolo_weights   = LaunchConfiguration("yolo_weights")
+    whisper_model  = LaunchConfiguration("whisper_model")
+    whisper_device = LaunchConfiguration("whisper_device")
+    enable_voice   = LaunchConfiguration("enable_voice")
+    enable_vision  = LaunchConfiguration("enable_vision")
 
     args = [
-        DeclareLaunchArgument("enable_voice",  default_value="true"),
-        DeclareLaunchArgument("enable_vision", default_value="true"),
+        DeclareLaunchArgument("use_llm",        default_value="true"),
+        DeclareLaunchArgument("llm_model_id",
+                              default_value="meta-llama/Meta-Llama-3-8B-Instruct"),
+        # Empty by default (matches README §6.2): perception then uses the
+        # NullDetector and publishes an empty board. An empty value cannot be
+        # passed on the CLI as `yolo_weights:=""` (ros2 launch rejects it), so
+        # the default must be empty here.
+        DeclareLaunchArgument("yolo_weights",   default_value=""),
+        DeclareLaunchArgument("whisper_model",  default_value="openai/whisper-small"),
+        DeclareLaunchArgument("whisper_device", default_value="cpu"),
+        DeclareLaunchArgument("enable_voice",   default_value="true"),
+        DeclareLaunchArgument("enable_vision",  default_value="true"),
     ]
 
     # Central per-package parameter files (the single source of truth).
@@ -55,16 +74,25 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={"use_rsp": "false", "use_sim_time": "true"}.items(),
     )
 
+    # Keep the engine (game_manager), the piece registry (move_executor) and the
+    # spawned scene (chess_gazebo) on the SAME position by reading the spawner's
+    # initial_fen from board_layout.yaml and feeding it to both nodes.
+    _board_layout = (Path(get_package_share_directory("chess_gazebo"))
+                     / "config" / "board_layout.yaml")
+    _initial_fen = yaml.safe_load(_board_layout.read_text()).get("initial_fen", "")
+
+    # move_executor is now a *client* of the running move_group (see
+    # chess_motion/move_executor_node.py), so it needs no MoveIt config of its own.
     move_executor = Node(
         package="chess_motion", executable="move_executor",
         output="screen",
-        parameters=[{"use_sim_time": True}],
+        parameters=[{"use_sim_time": True, "initial_fen": _initial_fen}],
     )
 
     game_manager = Node(
         package="chess_brain", executable="game_manager",
         output="screen",
-        parameters=[{"use_sim_time": True}],
+        parameters=[{"use_sim_time": True, "initial_fen": _initial_fen}],
     )
 
     # voice_parser is always-on: the regex fallback works even without an LLM.

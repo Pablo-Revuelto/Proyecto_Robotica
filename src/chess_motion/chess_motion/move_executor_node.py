@@ -2,12 +2,17 @@
 
 Exposes the `/chess/execute_move` action (chess_msgs/ExecuteChessMove).
 
-Internally it owns a `MoveItPy` instance with two planning components
-(`white_arm`, `black_arm`), the piece registry, and the Gazebo attach/detach
-helpers. For each goal:
+Instead of owning its own MoveIt instance, this node is a *client* of the
+already-running `move_group` (the `moveit_msgs/action/MoveGroup` action on
+`/move_action`). For each goal it sends pose / joint goals with
+`plan_only=False`, so move_group plans AND executes through the arm
+controllers. This avoids running a second, redundant MoveIt core (MoveItPy)
+alongside the one launched for RViz.
+
+For each goal:
   1. Pick which arm executes the move (white pieces → white arm, etc.).
   2. Build the `MotionPlan` of TCP poses (see `pose_planner`).
-  3. For each phase, plan + execute a Cartesian-ish goal through MoveIt.
+  3. For each phase, send a pose goal to move_group (plan + execute).
   4. Between `grasp` and `lift`, attach the piece in Gazebo;
      between `place` and `release`, detach.
   5. For captures, the captured piece is removed before the place phase.
@@ -18,13 +23,22 @@ Feedback `phase` lets clients display progress.
 from __future__ import annotations
 
 import math
-from typing import Optional
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from threading import Event
 
 import rclpy
-from geometry_msgs.msg import Pose, PoseStamped
-from rclpy.action import ActionServer
+from ament_index_python.packages import get_package_share_directory
+from geometry_msgs.msg import Pose, Vector3
+from rclpy.action import ActionClient, ActionServer
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from shape_msgs.msg import SolidPrimitive
+
+from moveit_msgs.action import MoveGroup
+from moveit_msgs.msg import (BoundingVolume, Constraints, JointConstraint,
+                             MoveItErrorCodes, OrientationConstraint,
+                             PositionConstraint)
 
 from chess_brain.board_geometry import BoardGeometry
 from chess_msgs.action import ExecuteChessMove
@@ -88,34 +102,46 @@ class MoveExecutor(Node):
             self.get_parameter("initial_fen").get_parameter_value().string_value
         )
 
-        # Lazy MoveItPy initialisation: defer the heavy MoveIt import so the
-        # node can announce the action server quickly, and so missing MoveIt
-        # at import-time produces a clearer error.
-        self._moveit = None
-        self._arms = {}
+        self._group = {"white": "white_arm", "black": "black_arm"}
+        self._tip   = {"white": "white_gripper_tip", "black": "black_gripper_tip"}
+        # Named rest poses, read from the SRDF (e.g. "ready") for retreat moves.
+        self._group_states = self._load_group_states()
+
+        # Reuse the existing move_group instead of a second MoveIt core.
+        self._move_group = ActionClient(self, MoveGroup, "/move_action")
 
         self._action = ActionServer(
             self, ExecuteChessMove, "/chess/execute_move", self._execute_cb)
 
         self.get_logger().info("Move executor ready, waiting for goals.")
 
-    # ---- MoveIt setup --------------------------------------------------
+    # ---- Setup ---------------------------------------------------------
 
-    def _ensure_moveit(self) -> None:
-        if self._moveit is not None:
-            return
-        from moveit.planning import MoveItPy
-        self._moveit = MoveItPy(node_name="chess_moveit_py")
-        self._arms = {
-            "white": self._moveit.get_planning_component("white_arm"),
-            "black": self._moveit.get_planning_component("black_arm"),
-        }
+    def _load_group_states(self) -> dict:
+        """Parse <group_state> joint targets from the MoveIt SRDF."""
+        states: dict = {}
+        try:
+            srdf = (Path(get_package_share_directory("chess_moveit_config"))
+                    / "config" / "chess.srdf")
+            root = ET.fromstring(srdf.read_text())
+            for gs in root.iter("group_state"):
+                key = (gs.get("group"), gs.get("name"))
+                states[key] = {j.get("name"): float(j.get("value"))
+                               for j in gs.findall("joint")}
+        except Exception as exc:        # noqa: BLE001
+            self.get_logger().warn(f"Could not load SRDF group states: {exc}")
+        return states
+
+    @staticmethod
+    def _wait_for_future(future, timeout_sec: float) -> bool:
+        """Block until `future` is done without re-spinning the node."""
+        done = Event()
+        future.add_done_callback(lambda _f: done.set())
+        return done.wait(timeout_sec)
 
     # ---- Action handling ----------------------------------------------
 
     def _execute_cb(self, goal_handle):
-        self._ensure_moveit()
-
         move: ChessMove = goal_handle.request.move
         color = "white" if move.color == ChessMove.COLOR_WHITE else "black"
         piece = _PIECE_FROM_CODE.get(move.piece, "pawn")
@@ -195,31 +221,107 @@ class MoveExecutor(Node):
             goal_handle.abort()
             return result
 
-    # ---- MoveIt helpers -----------------------------------------------
+    # ---- move_group client --------------------------------------------
 
     def _goto(self, color: str, pose: GraspPose) -> None:
-        arm = self._arms[color]
-        target = PoseStamped()
-        target.header.frame_id = "world"
-        target.pose = self._pose_from_grasp(pose)
-        tip_link = f"{color}_gripper_tip"
-
-        arm.set_start_state_to_current_state()
-        arm.set_goal_state(pose_stamped_msg=target, pose_link=tip_link)
-        plan_result = arm.plan()
-        if not plan_result:
-            raise RuntimeError(
-                f"Planning failed for {color} arm at "
-                f"({pose.x:.3f}, {pose.y:.3f}, {pose.z:.3f})")
-        self._moveit.execute(plan_result.trajectory, controllers=[])
+        """Plan + execute a TCP pose goal for the given arm via move_group."""
+        target = self._pose_from_grasp(pose)
+        constraints = self._pose_goal(self._tip[color], target)
+        self._send_goal(color, constraints,
+                        f"{color} pose ({pose.x:.3f}, {pose.y:.3f}, {pose.z:.3f})")
 
     def _go_named(self, color: str, state_name: str) -> None:
-        arm = self._arms[color]
-        arm.set_start_state_to_current_state()
-        arm.set_goal_state(configuration_name=state_name)
-        plan_result = arm.plan()
-        if plan_result:
-            self._moveit.execute(plan_result.trajectory, controllers=[])
+        """Best-effort move to a named SRDF state (e.g. 'ready')."""
+        joints = self._group_states.get((self._group[color], state_name))
+        if not joints:
+            self.get_logger().warn(
+                f"No SRDF state '{state_name}' for {color}_arm; skipping.")
+            return
+        c = Constraints()
+        for jname, val in joints.items():
+            jc = JointConstraint()
+            jc.joint_name = jname
+            jc.position = val
+            jc.tolerance_above = 0.01
+            jc.tolerance_below = 0.01
+            jc.weight = 1.0
+            c.joint_constraints.append(jc)
+        try:
+            self._send_goal(color, c, f"{color} {state_name}")
+        except RuntimeError as exc:
+            self.get_logger().warn(f"Retreat to '{state_name}' failed: {exc}")
+
+    def _send_goal(self, color: str, constraints: Constraints, label: str) -> None:
+        if not self._move_group.wait_for_server(timeout_sec=10.0):
+            raise RuntimeError("move_group action server /move_action unavailable")
+
+        goal = MoveGroup.Goal()
+        req = goal.request
+        req.group_name = self._group[color]
+        req.num_planning_attempts = 10
+        req.allowed_planning_time = 5.0
+        req.max_velocity_scaling_factor = 0.3
+        req.max_acceleration_scaling_factor = 0.3
+        req.goal_constraints.append(constraints)
+        req.workspace_parameters.header.frame_id = "world"
+        req.workspace_parameters.min_corner.x = -2.0
+        req.workspace_parameters.min_corner.y = -2.0
+        req.workspace_parameters.min_corner.z = -2.0
+        req.workspace_parameters.max_corner.x = 2.0
+        req.workspace_parameters.max_corner.y = 2.0
+        req.workspace_parameters.max_corner.z = 2.0
+
+        # plan AND execute through move_group's controllers; start from current.
+        goal.planning_options.plan_only = False
+        goal.planning_options.planning_scene_diff.is_diff = True
+        goal.planning_options.planning_scene_diff.robot_state.is_diff = True
+
+        send_future = self._move_group.send_goal_async(goal)
+        if not self._wait_for_future(send_future, 15.0):
+            raise RuntimeError(f"{label}: timed out sending goal")
+        handle = send_future.result()
+        if handle is None or not handle.accepted:
+            raise RuntimeError(f"{label}: goal rejected by move_group")
+
+        result_future = handle.get_result_async()
+        if not self._wait_for_future(result_future, 120.0):
+            raise RuntimeError(f"{label}: timed out waiting for execution")
+        code = result_future.result().result.error_code.val
+        if code != MoveItErrorCodes.SUCCESS:
+            raise RuntimeError(f"{label}: move_group failed (error code {code})")
+
+    @staticmethod
+    def _pose_goal(tip_link: str, pose: Pose) -> Constraints:
+        """A position + orientation constraint set for a TCP pose goal."""
+        c = Constraints()
+
+        pc = PositionConstraint()
+        pc.header.frame_id = "world"
+        pc.link_name = tip_link
+        pc.target_point_offset = Vector3()
+        sphere = SolidPrimitive()
+        sphere.type = SolidPrimitive.SPHERE
+        sphere.dimensions = [0.01]          # 1 cm tolerance
+        region = BoundingVolume()
+        region.primitives.append(sphere)
+        region_pose = Pose()
+        region_pose.position = pose.position
+        region_pose.orientation.w = 1.0
+        region.primitive_poses.append(region_pose)
+        pc.constraint_region = region
+        pc.weight = 1.0
+        c.position_constraints.append(pc)
+
+        oc = OrientationConstraint()
+        oc.header.frame_id = "world"
+        oc.link_name = tip_link
+        oc.orientation = pose.orientation
+        oc.absolute_x_axis_tolerance = 0.1
+        oc.absolute_y_axis_tolerance = 0.1
+        oc.absolute_z_axis_tolerance = 0.1
+        oc.weight = 1.0
+        c.orientation_constraints.append(oc)
+        return c
 
     @staticmethod
     def _pose_from_grasp(pose: GraspPose) -> Pose:

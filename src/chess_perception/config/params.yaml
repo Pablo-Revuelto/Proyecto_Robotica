@@ -1,10 +1,10 @@
 chess_board_state_estimator:
   ros__parameters:
 
-    # YOLO model weights path — resuelto automáticamente por el launch file.
-    # Solo sobreescribir si se quiere usar un .pt diferente (ruta absoluta).
-    yolo_weights: "Proyecto_Robotica/src/chess_perception/models/best.pt"
-    conf_threshold: 0.4
+    # YOLO model weights — ABSOLUTE path so it resolves regardless of the node's
+    # working directory (the old relative path only resolved when CWD=/home/adolfo).
+    yolo_weights: "/home/adolfo/Proyecto_Robotica/src/chess_perception/models/best.pt"
+    conf_threshold: 0.35
 
     # Overhead camera intrinsics
     camera_height: 1.2        # metres above board plane

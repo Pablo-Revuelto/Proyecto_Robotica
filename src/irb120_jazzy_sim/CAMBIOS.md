@@ -58,8 +58,10 @@ al incluir el MoveIt launch, para que sea Gazebo (vía
 - `irb120_jazzy_sim/_moveit_config.py`: módulo auxiliar que construye
   la `moveit_config` completa (URDF, SRDF, kinematics, OMPL, moveit_cpp).
 - `irb120_jazzy_sim/move_to_joint.py`: ejecuta una trayectoria
-  articular hardcodeada. Las posiciones se pasan como `numpy.ndarray`
-  en el orden de las articulaciones del grupo `irb120_arm`.
+  articular hardcodeada. Las posiciones se pasan como lista en el orden
+  de las articulaciones del grupo `irb120_arm`. Tras fijarlas se llama a
+  `RobotState.update()` (imprescindible: sin ello
+  `set_goal_state(robot_state=...)` provocaba un SIGSEGV en moveit_py).
 - `irb120_jazzy_sim/move_to_clicked.py`: nodo que se suscribe a
   `/clicked_point` (topic publicado por la herramienta **Publish Point**
   de RViz) y planifica/ejecuta una trayectoria al punto seleccionado

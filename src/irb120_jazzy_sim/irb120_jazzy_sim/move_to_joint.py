@@ -1,4 +1,3 @@
-import numpy as np
 import rclpy
 from moveit.planning import MoveItPy
 from moveit.core.robot_state import RobotState
@@ -16,8 +15,12 @@ def main():
     robot_state = RobotState(robot_model)
 
     # Orden: joint_1 ... joint_6 (segun el grupo irb120_arm en el SRDF)
-    joint_goal = np.array([0.0, -0.7, 0.9, 0.0, 1.0, 0.0])
+    joint_goal = [0.0, -0.7, 0.9, 0.0, 1.0, 0.0]
     robot_state.set_joint_group_positions("irb120_arm", joint_goal)
+    # Imprescindible: recalcula las transformadas del estado. Sin esto,
+    # set_goal_state(robot_state=...) accede a transforms sin actualizar y
+    # provoca un segfault (SIGSEGV) en moveit_py.
+    robot_state.update()
 
     arm.set_start_state_to_current_state()
     arm.set_goal_state(robot_state=robot_state)

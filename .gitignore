@@ -4,3 +4,4 @@ build/
 install/
 log/
 .vscode/
+src/irb120_jazzy_sim

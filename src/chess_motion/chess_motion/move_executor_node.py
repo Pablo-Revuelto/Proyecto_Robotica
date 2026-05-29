@@ -34,6 +34,7 @@ from rclpy.action import ActionClient, ActionServer
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from shape_msgs.msg import SolidPrimitive
+from tf2_ros import Buffer, TransformListener
 
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (BoundingVolume, Constraints, JointConstraint,
@@ -44,8 +45,8 @@ from chess_brain.board_geometry import BoardGeometry
 from chess_msgs.action import ExecuteChessMove
 from chess_msgs.msg import ChessMove
 
-from .gazebo_attach import (attach_piece, delete_model, detach_piece,
-                            teleport_model)
+from .gazebo_attach import (PieceFollower, attach_piece, delete_model,
+                            detach_piece, teleport_model)
 from .piece_registry import PieceRegistry
 from .pose_planner import (DEFAULT_PIECE_HEIGHTS, GraspPose, MotionPlan,
                            build_plan, captured_square_offboard)
@@ -85,6 +86,17 @@ class MoveExecutor(Node):
         self.declare_parameter("board_z",        0.02)
         self.declare_parameter("approach_clearance", 0.10)
         self.declare_parameter("grasp_clearance",    0.005)
+        # Visual piece-follow offset (metres, world axes) added to the gripper
+        # TCP while carrying a piece. The Z base is auto-set to -piece_height so
+        # the piece's top magnet sits at the gripper magnet; these params nudge
+        # it: piece too HIGH → make magnet_offset_z more negative; too LOW →
+        # less negative.
+        self.declare_parameter("magnet_offset_x", 0.0)
+        self.declare_parameter("magnet_offset_y", 0.0)
+        self.declare_parameter("magnet_offset_z", 0.0)
+        # 25 Hz: smooth enough; combined with gravity-off pieces this avoids the
+        # set_pose-vs-physics bouncing.
+        self.declare_parameter("follow_rate_hz",  25.0)
         self.declare_parameter("initial_fen",
                                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
 
@@ -96,6 +108,12 @@ class MoveExecutor(Node):
         )
         self._approach = float(self.get_parameter("approach_clearance").value)
         self._grasp_c  = float(self.get_parameter("grasp_clearance").value)
+        self._magnet_off = (
+            float(self.get_parameter("magnet_offset_x").value),
+            float(self.get_parameter("magnet_offset_y").value),
+            float(self.get_parameter("magnet_offset_z").value),
+        )
+        self._follow_rate = float(self.get_parameter("follow_rate_hz").value)
 
         self._registry = PieceRegistry()
         self._registry.populate_from_initial_fen(
@@ -109,6 +127,10 @@ class MoveExecutor(Node):
 
         # Reuse the existing move_group instead of a second MoveIt core.
         self._move_group = ActionClient(self, MoveGroup, "/move_action")
+
+        # TF, used to make a carried piece follow the gripper TCP (Option 3).
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self)
 
         self._action = ActionServer(
             self, ExecuteChessMove, "/chess/execute_move", self._execute_cb)
@@ -166,15 +188,17 @@ class MoveExecutor(Node):
             goal_handle.abort()
             return result
 
+        piece_height = DEFAULT_PIECE_HEIGHTS.get(piece, 0.05)
         plan = build_plan(
             from_square=from_sq,
             to_square=to_sq,
-            piece_height=DEFAULT_PIECE_HEIGHTS.get(piece, 0.05),
+            piece_height=piece_height,
             geometry=self._geometry,
             approach_clearance=self._approach,
             grasp_clearance=self._grasp_c,
         )
 
+        follower = None
         try:
             emit("approach_from", 0.10); self._goto(color, plan.approach_from)
             emit("grasp",         0.25); self._goto(color, plan.grasp)
@@ -183,6 +207,22 @@ class MoveExecutor(Node):
                               f"{color}_gripper_tip", piece_model)
             if not ok:
                 raise RuntimeError(f"Failed to attach {piece_model}")
+
+            # Option 3: the piece visually follows the gripper TCP during the
+            # carry. Base Z offset = -piece_height (top magnet at the gripper),
+            # plus the configurable magnet_offset_* nudge.
+            ox, oy, oz = self._magnet_off
+            follow_offset = (ox, oy, oz - piece_height)
+            self.get_logger().info(
+                f"Follow START: {piece_model} -> {color}_gripper_tip "
+                f"@ {self._follow_rate:.0f} Hz, offset={follow_offset} "
+                f"(z base=-piece_height={-piece_height:.3f}+{oz:.3f}), "
+                f"orientation=fixed upright")
+            follower = PieceFollower(
+                self._tf_buffer, self.get_logger(), self._world, piece_model,
+                f"{color}_gripper_tip",
+                offset=follow_offset, rate_hz=self._follow_rate)
+            follower.start()
 
             emit("lift",          0.40); self._goto(color, plan.lift)
 
@@ -195,7 +235,11 @@ class MoveExecutor(Node):
             emit("transport",     0.55); self._goto(color, plan.approach_to)
             emit("place",         0.70); self._goto(color, plan.place)
 
-            # Teleport the piece to the destination square so it appears placed.
+            # Stop following, then snap the piece to the exact destination square.
+            follower.stop(); follower = None
+            self.get_logger().info(
+                f"Follow STOP: snapping {piece_model} to {to_sq} "
+                f"({plan.place.x:.3f}, {plan.place.y:.3f}, {self._geometry.board_z:.3f})")
             teleport_model(self._world, piece_model,
                            plan.place.x, plan.place.y, self._geometry.board_z)
 
@@ -220,6 +264,10 @@ class MoveExecutor(Node):
             result.error = str(exc)
             goal_handle.abort()
             return result
+        finally:
+            # Never leave the follower thread running if the move ended early.
+            if follower is not None:
+                follower.stop()
 
     # ---- move_group client --------------------------------------------
 

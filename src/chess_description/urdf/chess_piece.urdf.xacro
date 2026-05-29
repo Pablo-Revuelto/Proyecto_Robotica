@@ -46,10 +46,10 @@ mesh_uri set    → STL mesh at scale 0.001 (mm STLs)
         <geometry><cylinder radius="${r}" length="${h}"/></geometry>
         <material name="${nm}_mat"><color rgba="${rgba}"/></material>
       </visual>
-      <collision>
-        <origin xyz="0 0 ${h/2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="${r}" length="${h}"/></geometry>
-      </collision>
+      <!-- No <collision> on purpose: pieces are moved only by set_pose and must
+           NOT physically collide with the gripper/arm (an immovable static piece
+           would block the controller → CONTROL_FAILED). Pieces are not in the
+           MoveIt planning scene, so their Gazebo collision is unused anyway. -->
     </xacro:if>
 
     <xacro:unless value="${mu == ''}">
@@ -58,10 +58,7 @@ mesh_uri set    → STL mesh at scale 0.001 (mm STLs)
         <geometry><mesh filename="${mu}" scale="0.001 0.001 0.001"/></geometry>
         <material name="${nm}_mat"><color rgba="${rgba}"/></material>
       </visual>
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="${mu}" scale="0.001 0.001 0.001"/></geometry>
-      </collision>
+      <!-- No <collision> on purpose (see note above). -->
     </xacro:unless>
   </link>
 
@@ -77,10 +74,7 @@ mesh_uri set    → STL mesh at scale 0.001 (mm STLs)
       <geometry><cylinder radius="${r*0.4}" length="0.003"/></geometry>
       <material name="${nm}_magnet_mat"><color rgba="0.65 0.65 0.7 1.0"/></material>
     </visual>
-    <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><cylinder radius="${r*0.4}" length="0.003"/></geometry>
-    </collision>
+    <!-- No <collision> on purpose (see note above). -->
   </link>
 
   <joint name="${nm}_magnet_joint" type="fixed">
@@ -88,5 +82,16 @@ mesh_uri set    → STL mesh at scale 0.001 (mm STLs)
     <child  link="${nm}_magnet"/>
     <origin xyz="0 0 ${h + 0.0015}" rpy="0 0 0"/>
   </joint>
+
+  <!-- Pieces are positioned only by set_pose (spawn, transport-follow, place),
+       never by physics. Making the MODEL static takes it fully out of the
+       physics solver: no gravity (no free-fall bounce between pose updates), no
+       contact impulses (no drift when the gripper grazes it) and no residual
+       velocity (no coasting after the carry, unlike a kinematic body) — yet
+       set_pose still repositions it. Reversible: remove this block to restore
+       full rigid-body dynamics. -->
+  <gazebo>
+    <static>true</static>
+  </gazebo>
 
 </robot>

@@ -505,7 +505,10 @@ Python del sistema ni guarda ningún token.
 ```bash
 pactl info
 pactl list sources short
-python3 -c "import sounddevice as sd; print(sd.query_devices())"
+
+# El check de Python necesita el puente IA (sounddevice vive en /opt/ai-venv):
+export PYTHONPATH=/opt/ai-venv/lib/python3.12/site-packages:$PYTHONPATH
+python3 -c "import sounddevice as sd; print(sd.query_devices()); print(sd.default.device)"
 ```
 
 > En WSL2 el audio entra por WSLg/PulseAudio. Si `sounddevice` no ve ninguna
@@ -528,6 +531,9 @@ ros2 launch chess_bringup chess_full.launch.py enable_voice:=true enable_vision:
 
 > "mueve el alfil blanco de d3 a c4"
 
+Más comandos de voz verificados (con sus UCI/SAN y la secuencia recomendada para
+la demo) en [`docs/JUGADAS_DEMO_VOZ.md`](docs/JUGADAS_DEMO_VOZ.md).
+
 ### 6. Resultado esperado
 
 1. `whisper_asr` transcribe el audio.
@@ -548,6 +554,10 @@ ros2 launch chess_bringup chess_full.launch.py enable_voice:=false enable_vision
 - `best.pt` es el modelo por defecto (ruta absoluta, `conf_threshold:0.35`). En la
   escena actual de Gazebo detecta de forma parcial (1–2 piezas) por la brecha de
   dominio real→simulación; por eso es advisory.
+- El motor de ajedrez (`python-chess`) sigue siendo la **fuente de verdad**; la
+  visión solo avisa ante una contradicción fuerte con suficiente confianza.
+- Para una visión fiable haría falta **fine-tuning con renders del propio
+  simulador** (fuera del alcance de esta entrega).
 - `best_yolox.pt` **no se versiona** y no compensa en la simulación actual.
 - El **token HF nunca se commitea** (usa `huggingface-cli login`).
 

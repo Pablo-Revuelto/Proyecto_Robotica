@@ -444,6 +444,8 @@ chess_voice_parser:
     huggingface_api_token: "tu_token_aqui"
 ```
 
+> ⚠️ **Seguridad:** NO commitees `params.yaml` con un token real. El método recomendado y por defecto es dejar `huggingface_api_token: ""` y autenticarte una vez con `huggingface-cli login` (el token se guarda en `~/.cache/huggingface/token`, fuera de Git). Ver *Ejecución demo 7.3*.
+
 A continuación, simplemente ejecute:
 
 ```bash
@@ -467,7 +469,87 @@ Habla cerca del micrófono. La pipeline:
 3. `voice_parser` (LLM) convierte el texto a UCI.
 4. `game_manager` valida la jugada con `python-chess`.
 5. `move_executor` planifica y ejecuta el pick & place.
-6. `board_state_estimator` actualiza `/chess/perceived_state` y cruza datos con el motor (avisa si discrepan).
+6. `board_state_estimator` publica `/chess/perceived_state`. El `game_manager` lo usa como **validador advisory oportunista**: nunca bloquea, nunca trata una casilla no detectada como vacía, y solo avisa si una detección de alta confianza contradice una casilla ocupada del motor (ver *Ejecución demo 7.3* más abajo).
+
+---
+
+## Ejecución demo 7.3 (reproducible, sin Docker)
+
+Receta mínima para que, tras `git pull`, cualquiera ponga en marcha la demo de
+voz + LLM. La visión YOLO queda como **advisory experimental** (no es autoridad
+del tablero), por lo que la demo principal va **sin visión**.
+
+### 1. Preparar el entorno ROS
+
+```bash
+colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+source install/setup.bash
+```
+
+> El `-DPython3_EXECUTABLE=/usr/bin/python3` es obligatorio: si CMake elige otro
+> intérprete, `chess_msgs` falla en `rosidl`.
+
+### 2. Preparar la IA (entorno `/opt/ai-venv`, numpy<2)
+
+```bash
+bash scripts/setup_ai_venv.sh
+/opt/ai-venv/bin/huggingface-cli login   # pega un token Read; NO se versiona
+```
+
+`scripts/setup_ai_venv.sh` crea `/opt/ai-venv`, instala `requirements-ai.txt` y
+**re-fija `numpy<2`** al final (ROS/cv_bridge se rompen con numpy 2). No toca el
+Python del sistema ni guarda ningún token.
+
+### 3. Comprobar el micrófono (WSL2)
+
+```bash
+pactl info
+pactl list sources short
+python3 -c "import sounddevice as sd; print(sd.query_devices())"
+```
+
+> En WSL2 el audio entra por WSLg/PulseAudio. Si `sounddevice` no ve ninguna
+> entrada, revisa que tu host (Windows) expone un micrófono y que
+> `PULSE_SERVER=unix:/mnt/wslg/PulseServer` (lo exporta el script de demo).
+
+### 4. Lanzar la demo
+
+```bash
+bash scripts/run_demo_73.sh
+```
+
+Equivale a, con el puente IA y el audio ya exportados:
+
+```bash
+ros2 launch chess_bringup chess_full.launch.py enable_voice:=true enable_vision:=false
+```
+
+### 5. Dar una orden de voz
+
+> "mueve el alfil blanco de d3 a c4"
+
+### 6. Resultado esperado
+
+1. `whisper_asr` transcribe el audio.
+2. `voice_parser` (LLM) devuelve `d3c4`.
+3. `game_manager` despacha `Bc4+`.
+4. `move_executor` planifica y el brazo ejecuta el pick & place.
+5. La pieza sigue al gripper durante el transporte.
+6. `Move applied. Turn: black`.
+
+### Visión advisory (opcional, experimental)
+
+```bash
+ros2 launch chess_bringup chess_full.launch.py enable_voice:=false enable_vision:=true
+```
+
+- La percepción YOLO es **solo un validador advisory/oportunista**: nunca bloquea
+  jugadas y **no debe usarse como autoridad del tablero**.
+- `best.pt` es el modelo por defecto (ruta absoluta, `conf_threshold:0.35`). En la
+  escena actual de Gazebo detecta de forma parcial (1–2 piezas) por la brecha de
+  dominio real→simulación; por eso es advisory.
+- `best_yolox.pt` **no se versiona** y no compensa en la simulación actual.
+- El **token HF nunca se commitea** (usa `huggingface-cli login`).
 
 ---
 

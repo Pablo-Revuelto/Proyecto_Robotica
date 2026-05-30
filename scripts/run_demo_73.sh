@@ -28,15 +28,19 @@ export PYTHONPATH="/opt/ai-venv/lib/python3.12/site-packages:${PYTHONPATH:-}"
 export PULSE_SERVER="unix:/mnt/wslg/PulseServer"
 
 # --- Source ROS + the workspace overlay --------------------------------------
-# shellcheck disable=SC1090
-source "/opt/ros/${ROS_DISTRO}/setup.bash"
+# ROS setup.bash files reference unbound vars (e.g. AMENT_TRACE_SETUP_FILES),
+# which trip `set -u`. Disable nounset just around the sourcing.
 if [[ ! -f "${REPO_ROOT}/install/setup.bash" ]]; then
     echo "ERROR: ${REPO_ROOT}/install/setup.bash not found. Build first:" >&2
     echo "  colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3" >&2
     exit 1
 fi
+set +u
+# shellcheck disable=SC1090
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
 # shellcheck disable=SC1091
 source "${REPO_ROOT}/install/setup.bash"
+set -u
 
 echo "[run] Launching 7.3 demo (voice + LLM, vision OFF) ..."
 exec ros2 launch chess_bringup chess_full.launch.py \

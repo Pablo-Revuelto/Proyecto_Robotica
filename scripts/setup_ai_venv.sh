@@ -32,7 +32,7 @@ if [[ ! -d "${VENV}" ]]; then
         python3 -m venv "${VENV}"
     else
         echo "[setup] /opt is not writable; creating ${VENV} with sudo and"
-        echo "        chowning it to ${USER} so later pip needs no sudo."
+        echo "        chowning it to $(id -un) so later pip needs no sudo."
         sudo python3 -m venv "${VENV}"
         sudo chown -R "$(id -un):$(id -gn)" "${VENV}"
     fi

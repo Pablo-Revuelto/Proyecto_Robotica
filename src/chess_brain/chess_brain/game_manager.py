@@ -10,9 +10,14 @@ Responsibilities (SRP):
   - Publish the current board state (`/chess/board_state`) for UIs and
     perception sanity-checking.
 
-Perception cross-check: if a `BoardState` arrives from `/chess/perceived_state`
-and disagrees with the engine, log a warning. Perception is observation, not
-authority -- the engine remains the source of truth.
+Perception cross-check (advisory, silent by default): when a `BoardState`
+arrives from `/chess/perceived_state`, validate ONLY the squares perception
+actually reports a piece on (`pieces[idx] != 0`). A non-detected square is
+never treated as empty, and the full FEN is never compared. A rate-limited
+warning is emitted only when a high-confidence detection contradicts an
+occupied engine square, and only when enough reliable detections are present.
+Perception is observation, not authority -- the engine remains the source of
+truth and is never modified, and execution is never blocked.
 """
 
 from __future__ import annotations
@@ -21,6 +26,8 @@ import threading
 from typing import Optional
 
 import rclpy
+from rcl_interfaces.msg import (FloatingPointRange, IntegerRange,
+                                ParameterDescriptor)
 from rclpy.action import ActionClient
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -35,6 +42,21 @@ from .chess_engine import PythonChessEngine
 from .msg_conversions import parsed_to_msg
 
 
+# FEN piece letter -> ChessMove.PIECE_* code (color carried separately by case).
+_FEN_PIECE_CODE = {
+    "p": ChessMove.PIECE_PAWN,   "n": ChessMove.PIECE_KNIGHT,
+    "b": ChessMove.PIECE_BISHOP, "r": ChessMove.PIECE_ROOK,
+    "q": ChessMove.PIECE_QUEEN,  "k": ChessMove.PIECE_KING,
+}
+# Inverse of the BoardState piece encoding, for human-readable log messages.
+_CODE_PIECE_NAME = {
+    ChessMove.PIECE_PAWN: "pawn",     ChessMove.PIECE_KNIGHT: "knight",
+    ChessMove.PIECE_BISHOP: "bishop", ChessMove.PIECE_ROOK: "rook",
+    ChessMove.PIECE_QUEEN: "queen",   ChessMove.PIECE_KING: "king",
+}
+_BLACK_BIT = 0x80
+
+
 class GameManager(Node):
 
     def __init__(self) -> None:
@@ -44,6 +66,53 @@ class GameManager(Node):
         self.declare_parameter("board_centre_x", 0.0)
         self.declare_parameter("board_centre_y", 0.0)
         self.declare_parameter("initial_fen", "")
+
+        # Advisory perception validator (silent by default). See module docstring.
+        self.declare_parameter(
+            "perception_validation_enabled", True,
+            ParameterDescriptor(
+                description="Master switch for advisory perception validation."))
+        self.declare_parameter(
+            "perception_validation_confidence", 0.80,
+            ParameterDescriptor(
+                description="Min board confidence before a perception warning.",
+                floating_point_range=[FloatingPointRange(
+                    from_value=0.0, to_value=1.0, step=0.0)]))
+        self.declare_parameter(
+            "perception_min_detections", 2,
+            ParameterDescriptor(
+                description="Min reliable detections before a perception warning.",
+                integer_range=[IntegerRange(
+                    from_value=0, to_value=64, step=1)]))
+        self.declare_parameter(
+            "perception_warn_cooldown_sec", 10.0,
+            ParameterDescriptor(
+                description="Per-square cooldown (s) between perception warnings.",
+                floating_point_range=[FloatingPointRange(
+                    from_value=0.0, to_value=3600.0, step=0.0)]))
+        self.declare_parameter(
+            "perception_warn_on_empty_engine", False,
+            ParameterDescriptor(
+                description="Warn when engine is empty but perception detects a "
+                            "piece (default off: treated as likely false positive)."))
+        self.declare_parameter(
+            "perception_log_matches", False,
+            ParameterDescriptor(
+                description="Emit a debug log when a detection agrees with the engine."))
+
+        self._perc_enabled = bool(
+            self.get_parameter("perception_validation_enabled").value)
+        self._perc_conf = float(
+            self.get_parameter("perception_validation_confidence").value)
+        self._perc_min_det = int(
+            self.get_parameter("perception_min_detections").value)
+        self._perc_cooldown = float(
+            self.get_parameter("perception_warn_cooldown_sec").value)
+        self._perc_warn_on_empty = bool(
+            self.get_parameter("perception_warn_on_empty_engine").value)
+        self._perc_log_matches = bool(
+            self.get_parameter("perception_log_matches").value)
+        self._perc_last_warn: dict = {}   # square index -> last warn time (s)
 
         ss = self.get_parameter("square_size").value
         bz = self.get_parameter("board_z").value
@@ -98,10 +167,114 @@ class GameManager(Node):
                 self._busy = False
 
     def _on_perceived(self, msg: BoardState) -> None:
-        if msg.fen and msg.fen.split(" ")[0] != self._engine.fen().split(" ")[0]:
+        """Advisory perception cross-check. Never blocks, never mutates state.
+
+        Only squares perception actually reports a piece on are considered
+        (``pieces[idx] != 0``); a non-detected square is never assumed empty,
+        and the full FEN is never compared. A contradiction warning is emitted
+        only when (a) enough reliable detections are present, (b) board
+        confidence clears the threshold, and (c) a detected piece disagrees
+        with an *occupied* engine square -- rate-limited per square.
+        """
+        if not self._perc_enabled:
+            return
+
+        # Squares perception is confident a piece sits on. 0 == not detected,
+        # which we never treat as "empty".
+        detections = [(idx, b) for idx, b in enumerate(msg.pieces) if b != 0]
+        if not detections:
+            return
+
+        engine_codes = self._engine_occupancy()
+        contradictions = []
+        for idx, perceived in detections:
+            engine = engine_codes.get(idx, 0)
+            if engine == perceived:
+                if self._perc_log_matches:
+                    self.get_logger().debug(
+                        f"Perception agrees on {self._square_name(idx)}: "
+                        f"{self._describe_code(perceived)}")
+                continue
+            if engine == 0:
+                # Engine empty but perception sees something -> likely a false
+                # positive. Off by default; debug only.
+                if self._perc_warn_on_empty:
+                    contradictions.append((idx, engine, perceived))
+                else:
+                    self.get_logger().debug(
+                        f"Perception sees {self._describe_code(perceived)} on "
+                        f"{self._square_name(idx)} where engine is empty "
+                        f"(ignored).")
+                continue
+            # Same square, occupied by both, but different piece/colour.
+            contradictions.append((idx, engine, perceived))
+
+        if not contradictions:
+            return
+
+        # Gate warnings on detection count and board confidence (debug only
+        # when suppressed -- never an error, never blocking).
+        if len(detections) < self._perc_min_det:
+            self.get_logger().debug(
+                f"Perception contradiction suppressed: only {len(detections)} "
+                f"detection(s) (< {self._perc_min_det}).")
+            return
+        if msg.confidence < self._perc_conf:
+            self.get_logger().debug(
+                f"Perception contradiction suppressed: confidence "
+                f"{msg.confidence:.2f} < {self._perc_conf:.2f}.")
+            return
+
+        now = self.get_clock().now().nanoseconds * 1e-9
+        for idx, engine, perceived in contradictions:
+            last = self._perc_last_warn.get(idx)
+            if last is not None and (now - last) < self._perc_cooldown:
+                continue
+            self._perc_last_warn[idx] = now
             self.get_logger().warn(
-                f"Perception disagrees with engine: perception={msg.fen}, "
-                f"engine={self._engine.fen()}")
+                f"Perception disagrees on {self._square_name(idx)}: "
+                f"engine={self._describe_code(engine)}, "
+                f"perception={self._describe_code(perceived)} "
+                f"(conf={msg.confidence:.2f}). Engine remains authority.")
+
+    # ---- Perception helpers -------------------------------------------
+
+    def _engine_occupancy(self) -> dict:
+        """Engine FEN placement -> {square index: BoardState piece byte}.
+
+        Square index matches the perception encoding: ``rank * 8 + file`` with
+        rank 0 = rank "1" and file 0 = file "a". Only occupied squares appear.
+        """
+        placement = self._engine.fen().split(" ", 1)[0]
+        codes: dict = {}
+        rank = 7  # FEN lists rank 8 first; index 7 is rank "8".
+        for row in placement.split("/"):
+            file = 0
+            for ch in row:
+                if ch.isdigit():
+                    file += int(ch)
+                    continue
+                code = _FEN_PIECE_CODE.get(ch.lower())
+                if code is None:
+                    continue
+                if ch.islower():
+                    code |= _BLACK_BIT
+                codes[rank * 8 + file] = code
+                file += 1
+            rank -= 1
+        return codes
+
+    @staticmethod
+    def _square_name(idx: int) -> str:
+        return f"{chr(ord('a') + (idx % 8))}{(idx // 8) + 1}"
+
+    @staticmethod
+    def _describe_code(byte: int) -> str:
+        if byte == 0:
+            return "empty"
+        colour = "black" if (byte & _BLACK_BIT) else "white"
+        name = _CODE_PIECE_NAME.get(byte & ~_BLACK_BIT, "?")
+        return f"{colour} {name}"
 
     # ---- Pipeline ------------------------------------------------------
 

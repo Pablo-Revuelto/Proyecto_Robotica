@@ -92,7 +92,17 @@ def generate_launch_description() -> LaunchDescription:
     game_manager = Node(
         package="chess_brain", executable="game_manager",
         output="screen",
-        parameters=[{"use_sim_time": True, "initial_fen": _initial_fen}],
+        parameters=[{
+            "use_sim_time": True,
+            "initial_fen": _initial_fen,
+            # Advisory perception validator (silent by default; never blocks).
+            "perception_validation_enabled": True,
+            "perception_validation_confidence": 0.80,
+            "perception_min_detections": 2,
+            "perception_warn_cooldown_sec": 10.0,
+            "perception_warn_on_empty_engine": False,
+            "perception_log_matches": False,
+        }],
     )
 
     # voice_parser is always-on: the regex fallback works even without an LLM.

@@ -1,0 +1,424 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{booktabs}
+
+% --- Estilo ---
+\definecolor{azul}{rgb}{0.10,0.35,0.55}
+\definecolor{verde}{rgb}{0.10,0.45,0.40}
+\definecolor{gris}{gray}{0.40}
+
+\titleformat{\section}{\large\bfseries\color{azul}}{}{0pt}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{verde}}{}{0pt}{}
+
+\newcommand{\slide}[1]{\textbf{\color{azul}[Diapositiva #1]}}
+\newcommand{\transicion}[1]{\par\smallskip\noindent\textit{\color{gris}Transición:} #1}
+
+\setlist[itemize]{itemsep=2pt, topsep=3pt, leftmargin=1.4em}
+
+\title{\textbf{Robochess} --- Guión de la presentación}
+\author{Juan Pedro García Sanz \and Pablo Revuelto de Miguel \and Adolfo Peña Marín}
+\date{Robótica Inteligente --- Universidad Loyola Andalucía}
+
+\begin{document}
+\maketitle
+
+% ============================================================
+\section*{Cómo nos organizamos}
+% ============================================================
+
+\noindent
+Tres bloques, uno por persona, siguiendo el hilo natural de la presentación:
+un sistema que \textbf{ve, oye, piensa y mueve}.
+
+\begin{center}
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Persona} & \textbf{Bloque} & \textbf{Diapositivas} \\
+\midrule
+Juan Pedro & Introducción y arquitectura        & 1--4  \\
+Adolfo     & Percepción: visión, voz y cerebro  & 5--7  \\
+Pablo      & Movimiento, integración y cierre   & 8--12 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{Duración objetivo:} 10--12 min en total ($\sim$3--4 min por persona).
+Hablad despacio, una idea por diapositiva. No hay que leer la diapositiva:
+ella tiene el titular, vosotros contáis el porqué.
+
+\bigskip
+% ============================================================
+\section{Bloque 1 --- Juan Pedro (diapositivas 1--4)}
+% ============================================================
+
+\subsection{\slide{1} Portada}
+\begin{itemize}
+    \item Saludar y presentar al equipo brevemente.
+    \item Frase gancho: \emph{``Os vamos a enseñar a dos brazos robóticos
+          jugando al ajedrez entre ellos, y lo único que tenéis que hacer es
+          decirles la jugada en voz alta''.}
+\end{itemize}
+
+\subsection{\slide{2} Índice}
+\begin{itemize}
+    \item En 10 segundos: las cuatro partes que vais a recorrer
+          (arquitectura, percepción, decisión y movimiento, resultados).
+\end{itemize}
+
+\subsection{\slide{3} Qué es Robochess}
+\begin{itemize}
+    \item Explicar la idea: dos ABB IRB120 enfrentados, partida autónoma en
+          simulación, jugada dictada por voz.
+    \item Insistir en el reto real: lo difícil \textbf{no} es mover un brazo,
+          es \textbf{integrar cuatro mundos} que normalmente van por separado
+          ---visión, voz, razonamiento y planificación--- en un mismo flujo.
+\end{itemize}
+
+\subsection{\slide{4} Arquitectura}
+\begin{itemize}
+    \item Apoyarse en el diagrama: voz y cámara entran al cerebro, el cerebro
+          ordena el movimiento, y la cámara verifica el resultado.
+    \item Mencionar que todo corre sobre \textbf{ROS\,2 Jazzy} y que las partes
+          se comunican por \textbf{topics} (flujo continuo), \textbf{servicios}
+          (petición--respuesta) y \textbf{acciones} (tareas largas).
+    \item Idea clave: arquitectura \textbf{modular}; cada bloque se desarrolla y
+          se prueba por separado.
+\end{itemize}
+
+\transicion{``Empecemos por cómo el sistema percibe el mundo: la vista y el
+oído. Adolfo os lo cuenta.''}
+
+\bigskip
+% ============================================================
+\section{Bloque 2 --- Adolfo (diapositivas 5--7)}
+% ============================================================
+
+\subsection{\slide{5} Visión: del píxel a la casilla}
+\begin{itemize}
+    \item Cámara cenital + detector \textbf{YOLOv8}: localiza cada pieza y la
+          clasifica en \textbf{12 clases} (6 tipos $\times$ 2 colores).
+    \item Explicar la \textbf{homografía}: cómo pasamos del centro de la caja
+          en píxeles a una casilla del tablero (a1--h8).
+    \item Matiz importante: la visión \textbf{verifica, no manda}. Contrasta lo
+          que ve con el estado interno; la autoridad es el motor de ajedrez.
+\end{itemize}
+
+\subsection{\slide{6} Voz: del audio a una jugada legal}
+\begin{itemize}
+    \item Recorrido: \textbf{VAD} (corta cuando dejas de hablar) $\rightarrow$
+          \textbf{Whisper} (audio a texto) $\rightarrow$ \textbf{LLM} (texto a
+          notación de ajedrez, p.\,ej. \texttt{e2e4}).
+    \item La decisión que nos salvó: el parser \textbf{solo} puede devolver una
+          jugada que esté en la lista de \textbf{movimientos legales}; nunca se
+          inventa nada.
+    \item Red de seguridad: si el LLM falla, un parser por \textbf{expresiones
+          regulares} toma el relevo. Robusto ante transcripciones ruidosas.
+\end{itemize}
+
+\subsection{\slide{7} El cerebro: las reglas mandan}
+\begin{itemize}
+    \item El motor (\textbf{python-chess}) guarda el estado autoritativo en
+          formato \textbf{FEN} y valida cada jugada: legalidad, turno, y detecta
+          \textbf{jaque, mate y tablas}.
+    \item Es el \textbf{director de orquesta}: si la jugada vale, la empaqueta y
+          se la pasa al movimiento mediante una \textbf{acción} ROS\,2; al
+          terminar, actualiza estado y cede el turno.
+\end{itemize}
+
+\transicion{``Ya tenemos una jugada válida. Ahora hay que ejecutarla con el
+brazo sin tirar medio tablero. Te lo cuenta Pablo.''}
+
+\bigskip
+% ============================================================
+\section{Bloque 3 --- Pablo (diapositivas 8--12)}
+% ============================================================
+
+\subsection{\slide{8} Movimiento: planificar sin chocar}
+\begin{itemize}
+    \item Cada brazo tiene \textbf{6 grados de libertad}. \textbf{MoveIt\,2}
+          resuelve la \textbf{cinemática inversa} y busca con \textbf{OMPL} una
+          trayectoria \textbf{libre de colisiones} (tablero, piezas, otro brazo).
+    \item \textit{Pick \& place} por fases: aproximar, agarrar, elevar,
+          transportar, soltar, retirarse. Agarre \textbf{magnético} para piezas
+          pequeñas.
+    \item Detalle de diseño que merece mención: reutilizamos un único
+          planificador en marcha en vez de levantar otro, para no duplicar trabajo.
+\end{itemize}
+
+\subsection{\slide{9} El escenario simulado}
+\begin{itemize}
+    \item \textbf{Gazebo Harmonic}: mesa, tablero, los dos IRB120 y la cámara,
+          con física realista de peso y contactos.
+    \item Las articulaciones se controlan con \textbf{ros2\_control} por el
+          puente ROS--Gazebo. Subrayar: es la \textbf{misma} infraestructura que
+          se usaría sobre un robot real.
+\end{itemize}
+
+\subsection{\slide{10} Qué funciona y qué nos costó}
+\begin{itemize}
+    \item Repasar rápido lo que funciona: partida completa por voz, validación
+          en tiempo real, pick \& place con los dos brazos, visión como validador.
+    \item Ser honestos con los retos (esto da valor y suena a trabajo real):
+          \textbf{capturar el micrófono bajo WSL2}, lograr que la \textbf{pieza
+          siguiera al gripper} durante el transporte, y \textbf{sobrevivir a
+          transcripciones ruidosas}.
+\end{itemize}
+
+\subsection{\slide{11} Conclusiones}
+\begin{itemize}
+    \item La idea fuerza: integrar IA (visión, voz, lenguaje) con robótica
+          (planificación, control) sobre ROS\,2, y que todo funcione junto.
+    \item La modularidad fue clave: cada pieza es sustituible.
+    \item Próximos pasos: motor que juegue solo (Stockfish), salto a hardware
+          real, y afinar visión y tiempos de planificación.
+\end{itemize}
+
+\subsection{\slide{12} ¿Preguntas?}
+\begin{itemize}
+    \item Cerrar agradeciendo y abrir el turno de preguntas.
+\end{itemize}
+
+\bigskip
+% ============================================================
+\section*{Turno de preguntas: quién responde qué}
+% ============================================================
+\begin{itemize}
+    \item \textbf{Juan Pedro}: arquitectura, ROS\,2, integración general.
+    \item \textbf{Adolfo}: visión (YOLO, homografía), voz (Whisper, LLM), reglas.
+    \item \textbf{Pablo}: MoveIt, planificación, simulación, control.
+\end{itemize}
+
+\noindent
+\textit{Si una pregunta pilla a alguien, mirad al compañero del área; no pasa
+nada por repartir.}
+
+\newpage
+% ============================================================
+\section*{Banco de preguntas probables (con respuesta técnica)}
+% ============================================================
+
+\noindent
+El profesor avisó de que preguntará bastante. Aquí van las preguntas más
+probables con una respuesta razonada. La idea no es soltarlas de memoria, sino
+tener el argumento claro. \textbf{[JP]}~=~Juan Pedro, \textbf{[A]}~=~Adolfo,
+\textbf{[P]}~=~Pablo (responde preferentemente quien lleva ese área).
+
+% ---------- ROS 2 ----------
+\subsection*{Sobre ROS\,2 e integración}
+
+\textbf{1. ¿Por qué ROS\,2 y no un único programa monolítico? [JP]}
+\begin{itemize}
+    \item ROS\,2 nos da \textbf{desacoplamiento}: cada capacidad (visión, voz,
+          motor, movimiento) es un nodo independiente que se desarrolla,
+          lanza y depura por separado.
+    \item Nos da ``gratis'' el \textbf{transporte} (DDS), el descubrimiento de
+          nodos, el registro y herramientas de introspección
+          (\texttt{ros2 topic echo}, \texttt{rqt}).
+    \item Y nos permite \textbf{sustituir piezas} sin tocar el resto: por
+          ejemplo cambiar Whisper por otro ASR sin que el motor se entere.
+\end{itemize}
+
+\textbf{2. ¿Cuándo usáis topic, servicio o acción, y por qué? [JP]}
+\begin{itemize}
+    \item \textbf{Topic} para flujo continuo sin respuesta: la imagen de la
+          cámara (\texttt{/overhead\_camera/image}) y el estado del tablero.
+    \item \textbf{Servicio} para petición--respuesta corta y síncrona:
+          interpretar una frase (\texttt{/chess/voice/parse}).
+    \item \textbf{Acción} para tareas largas con \textit{feedback} y posibilidad
+          de cancelación: ejecutar la jugada (\texttt{/chess/execute\_move}),
+          que tarda segundos y publica en qué fase va (\textit{approach, grasp,
+          lift\dots}).
+\end{itemize}
+
+\textbf{3. ¿Cómo evitáis que el nodo se bloquee esperando una respuesta? [JP/P]}
+\begin{itemize}
+    \item Usamos \textbf{ejecutores multihilo} y lanzamos el pipeline de cada
+          jugada en un \textbf{hilo aparte}. Si esperásemos la respuesta del
+          servicio/acción dentro del \textit{callback}, el ejecutor se
+          bloquearía y nunca llegaría esa respuesta (interbloqueo).
+    \item En lugar de re-``spinear'' el nodo, esperamos el \textit{future} con un
+          \textit{done-callback}, dejando el ejecutor libre para entregar el
+          resultado.
+\end{itemize}
+
+\textbf{4. ¿Cómo se mueven realmente las articulaciones? [P]}
+\begin{itemize}
+    \item Con \textbf{ros2\_control}: un \texttt{joint\_trajectory\_controller}
+          por brazo recibe la trayectoria que planifica MoveIt y la ejecuta a
+          250\,Hz.
+    \item En simulación, el plugin \texttt{gz\_ros2\_control} hace de
+          \textit{hardware interface}; sobre un robot real se cambiaría ese
+          plugin por el driver del ABB \textbf{sin tocar la lógica de arriba}.
+\end{itemize}
+
+% ---------- IA / integración ----------
+\subsection*{Sobre la integración de la IA}
+
+\textbf{5. ¿Cómo integráis modelos de IA pesados (Whisper, LLM) con ROS\,2? [A]}
+\begin{itemize}
+    \item Cada modelo vive en su \textbf{propio nodo} y se \textbf{carga de forma
+          perezosa} (al arrancar el nodo, no al importar), para no penalizar el
+          arranque del resto del sistema.
+    \item Las dependencias de IA (torch, transformers, ultralytics, langchain)
+          viven en un \textbf{entorno virtual} dedicado que se inyecta a los
+          nodos por \texttt{PYTHONPATH}, manteniéndolas separadas del Python del
+          sistema que usa ROS.
+    \item Restricción real que respetamos: \textbf{numpy\,<\,2}, porque las
+          extensiones C de ROS\,2 (\texttt{cv\_bridge}) están compiladas contra
+          numpy\,1.x.
+\end{itemize}
+
+\textbf{6. ¿Dónde corre cada modelo: local o en la nube? [A]}
+\begin{itemize}
+    \item \textbf{Whisper}: en \textbf{local} (CPU), vía \texttt{transformers}.
+          Pesos descargados una vez; sin coste ni API.
+    \item \textbf{LLM} (Llama\,3): a través de un \textbf{endpoint de inferencia
+          de HuggingFace} (en la nube). Por eso hay un \textit{fallback} local:
+          si no hay red o token, el sistema sigue funcionando.
+\end{itemize}
+
+\textbf{7. ¿Cómo garantizáis que el sistema no haga una jugada inventada o
+ilegal? [A]} \emph{(Pregunta estrella: la robustez es nuestro punto fuerte.)}
+\begin{itemize}
+    \item \textbf{Doble red}. Primero, al LLM le pasamos en el \textit{prompt}
+          la \textbf{lista de movimientos legales} y le obligamos a devolver uno
+          de ella o \texttt{null}; validamos el JSON de salida.
+    \item Segundo, aunque el LLM acierte, el movimiento se \textbf{vuelve a
+          validar} contra python-chess antes de mover el brazo. Si no es legal,
+          no se ejecuta. El motor es la \textbf{autoridad}, no el LLM.
+\end{itemize}
+
+% ---------- LangChain / LangGraph ----------
+\subsection*{Sobre LangChain / LangGraph}
+
+\textbf{8. ¿Por qué LangChain y no LangGraph? [A]} \emph{(El profe lo va a
+preguntar seguro.)}
+\begin{itemize}
+    \item LangGraph brilla en flujos \textbf{con estado, ramas, ciclos y
+          múltiples agentes}. Nuestra tarea de parseo es de \textbf{un solo
+          paso}: \textit{prompt} $\rightarrow$ LLM $\rightarrow$ JSON validado.
+    \item Para eso, una \textbf{cadena} de LangChain (\texttt{prompt | llm |
+          parser}) es la herramienta adecuada; LangGraph sería sobreingeniería.
+    \item Dónde \textbf{sí} encajaría LangGraph: convertirlo en un agente con
+          estado de partida, memoria y herramientas (consultar al motor,
+          re-preguntar al usuario si la frase es ambigua). Es una vía de mejora
+          honesta que podemos mencionar.
+\end{itemize}
+
+\textbf{9. ¿Qué es exactamente vuestra ``cadena'' de LangChain? [A]}
+\begin{itemize}
+    \item Tres eslabones con el operador \textit{pipe}: una
+          \texttt{ChatPromptTemplate} (sistema + frase del usuario, con FEN y
+          jugadas legales), el modelo de chat (\texttt{ChatHuggingFace} sobre un
+          \texttt{HuggingFaceEndpoint}) y un \textit{parser} de salida.
+    \item Usamos \textbf{temperatura 0} para que sea determinista: en parseo no
+          queremos creatividad, queremos exactitud.
+\end{itemize}
+
+\textbf{10. ¿Por qué un LLM y no solo expresiones regulares? [A]}
+\begin{itemize}
+    \item El LLM entiende lenguaje \textbf{natural y variado} (``mueve el caballo
+          a f3'', ``captura en d5 con la torre'', mezcla español/inglés) que un
+          regex rígido no cubre.
+    \item Pero mantenemos el \textbf{regex como fallback}: cubre los casos
+          típicos sin red ni coste, y nos dio robustez cuando la transcripción
+          venía con ruido. Es una decisión de \textbf{ingeniería}, no de moda.
+\end{itemize}
+
+% ---------- Visión ----------
+\subsection*{Sobre el modelo de visión}
+
+\textbf{11. ¿Qué modelo de visión usáis y por qué? [A]}
+\begin{itemize}
+    \item \textbf{YOLOv8} (Ultralytics): detector de objetos en \textbf{una
+          pasada}, rápido y suficientemente preciso para 12 clases (6 piezas
+          $\times$ 2 colores) desde una cámara cenital.
+    \item Lo entrenamos para nuestras piezas; cargamos los pesos
+          (\texttt{.pt}) por parámetro, así que el modelo es intercambiable.
+\end{itemize}
+
+\textbf{12. ¿Cómo pasáis de una detección en la imagen a una casilla? [A]}
+\begin{itemize}
+    \item Tomamos el \textbf{centro} de la caja detectada y aplicamos una
+          \textbf{homografía} cámara cenital $\rightarrow$ plano del tablero,
+          calculada a partir de la altura y el campo de visión de la cámara.
+    \item Eso da coordenadas métricas en el tablero, que discretizamos a casilla
+          (a1--h8) con la geometría del tablero (tamaño de casilla y centro).
+    \item Para hardware real está previsto pasar a homografía con \textbf{4
+          marcadores ArUco} en las esquinas.
+\end{itemize}
+
+\textbf{13. Si la visión se equivoca, ¿se rompe la partida? [A]}
+\begin{itemize}
+    \item No. La visión es \textbf{advisory}: solo \textbf{avisa} si lo que ve
+          contradice el estado interno, y con \textbf{histéresis} (umbral de
+          confianza, mínimo de detecciones y \textit{cooldown} para no spamear).
+    \item Nunca modifica el estado ni bloquea la ejecución. La fuente de verdad
+          es el motor de ajedrez.
+\end{itemize}
+
+% ---------- Voz ----------
+\subsection*{Sobre el modelo de voz}
+
+\textbf{14. ¿Por qué Whisper-small y no otro tamaño? [A]}
+\begin{itemize}
+    \item \textbf{Equilibrio} precisión/latencia en español sobre CPU.
+          \textit{tiny}/\textit{base} son más rápidos pero fallan más;
+          \textit{medium}/\textit{large} son más precisos pero lentos sin GPU.
+    \item Es un \textbf{parámetro}: se puede subir de tamaño o mover a GPU
+          (\texttt{device:=cuda}) sin tocar código.
+\end{itemize}
+
+\textbf{15. ¿Cómo sabéis cuándo empieza y acaba una orden de voz? [A]}
+\begin{itemize}
+    \item Con \textbf{detección de actividad de voz} por energía (RMS): un nodo
+          de captura abre la grabación cuando la energía supera un umbral y la
+          cierra tras $\sim$700\,ms de \textbf{silencio}.
+    \item Así Whisper recibe \textbf{una intervención completa} y no audio
+          cortado. (Detalle real: bajo WSL2 tuvimos que usar el backend
+          PulseAudio porque el resto capturaba silencio.)
+\end{itemize}
+
+% ---------- Integración global ----------
+\subsection*{Sobre la integración de todo}
+
+\textbf{16. Contadme el viaje completo de ``mueve el peón de e2 a e4''. [todos]}
+\begin{itemize}
+    \item \textbf{[A]} El micrófono capta, la VAD segmenta, \textbf{Whisper}
+          transcribe y el \textbf{LLM} traduce a \texttt{e2e4}, validado contra
+          las jugadas legales.
+    \item \textbf{[JP]} El \textbf{game manager} recibe la orden, la valida con
+          python-chess y la despacha como \textbf{acción} al movimiento.
+    \item \textbf{[P]} \textbf{MoveIt} planifica la trayectoria sin colisiones y
+          \textbf{ros2\_control} la ejecuta; se hace el \textit{pick \& place} y,
+          al terminar, el motor actualiza estado y cambia de turno.
+\end{itemize}
+
+\textbf{17. ¿Qué pasa con los dos brazos? ¿Se coordinan o chocan? [P]}
+\begin{itemize}
+    \item Hay \textbf{dos grupos de planificación} (\texttt{white\_arm} y
+          \texttt{black\_arm}); cada jugada la ejecuta el brazo de su color.
+    \item Como el juego es \textbf{por turnos}, no se mueven a la vez. Aun así,
+          el planificador conoce el otro brazo como \textbf{obstáculo} en la
+          escena, de modo que evita colisiones al planificar.
+\end{itemize}
+
+\textbf{18. ¿Qué es lo que más os costó integrar? [todos]}
+\begin{itemize}
+    \item La \textbf{frontera IA--ROS}: convivencia de versiones (numpy<2),
+          entornos de Python y cargar modelos pesados sin bloquear el sistema.
+    \item En manipulación, que la \textbf{pieza siguiera al gripper} de forma
+          visualmente correcta durante el transporte.
+    \item En voz, la \textbf{captura de micrófono} fiable y la robustez ante
+          transcripciones ruidosas.
+\end{itemize}
+
+\end{document}

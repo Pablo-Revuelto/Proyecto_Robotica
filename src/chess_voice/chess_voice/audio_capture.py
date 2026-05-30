@@ -14,6 +14,7 @@ rest of the pipeline.
 from __future__ import annotations
 
 import collections
+import threading
 from typing import Deque
 
 import numpy as np
@@ -48,21 +49,52 @@ class AudioCapture(Node):
         self._buffer: Deque[np.ndarray] = collections.deque()
         self._silent_blocks = 0
         self._in_utterance = False
+        self._running = False
+        self._reader: threading.Thread | None = None
 
+        # Blocking read in a dedicated thread (NOT a PortAudio callback): under
+        # WSL2 the callback path spawns a real-time-scheduled thread that fails
+        # with `paTimedOut [-9987]`; a blocking InputStream.read() avoids it.
+        # `device` should be "pulse" on WSL2 (the only backend wired to the WSLg
+        # microphone); other ALSA devices open but capture silence.
         try:
             import sounddevice as sd
             self._stream = sd.InputStream(
                 samplerate=self._sr, channels=1, blocksize=self._block,
-                dtype="float32", device=device, callback=self._on_audio)
+                dtype="float32", device=device)
             self._stream.start()
-            self.get_logger().info(
-                f"Mic streaming @ {self._sr} Hz, start_rms={self._start}")
         except Exception as exc:        # noqa: BLE001 -- top-level user feedback
-            self.get_logger().error(f"Failed to open microphone: {exc}")
+            self.get_logger().error(
+                f"Failed to open microphone (device={device!r}): {exc}")
             raise
 
-    def _on_audio(self, indata, frames, time_, status) -> None:   # noqa: D401
-        block = indata[:, 0].copy()
+        self._running = True
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+        self.get_logger().info(
+            f"Mic streaming @ {self._sr} Hz (device={device!r}, blocking read), "
+            f"start_rms={self._start}")
+
+    def _read_loop(self) -> None:
+        while self._running:
+            try:
+                indata, _overflowed = self._stream.read(self._block)
+            except Exception as exc:        # noqa: BLE001
+                self.get_logger().error(f"Mic read error: {exc}")
+                break
+            self._process(indata[:, 0].copy())
+
+    def stop(self) -> None:
+        self._running = False
+        if self._reader is not None:
+            self._reader.join(timeout=1.0)
+        try:
+            self._stream.stop()
+            self._stream.close()
+        except Exception:               # noqa: BLE001
+            pass
+
+    def _process(self, block) -> None:
         rms = float(np.sqrt(np.mean(block * block) + 1e-12))
 
         if not self._in_utterance:
@@ -103,6 +135,7 @@ def main(argv=None) -> None:
     try:
         rclpy.spin(node)
     finally:
+        node.stop()
         node.destroy_node()
         rclpy.shutdown()
 

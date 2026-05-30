@@ -6,7 +6,10 @@ chess_audio_capture:
     end_rms: 0.012
     silence_ms: 700
     max_utterance_s: 12.0
-    device: ""
+    # "pulse" = the PulseAudio backend, the only input wired to the WSLg/RDP
+    # microphone under WSL2 (other ALSA devices open but capture silence).
+    # On a native Linux box with a real ALSA mic, "" (default device) also works.
+    device: "pulse"
 
 chess_whisper_asr:
   ros__parameters:

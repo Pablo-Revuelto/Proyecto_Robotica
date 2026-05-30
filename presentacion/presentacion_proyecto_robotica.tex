@@ -8,6 +8,7 @@
 % --- Paquetes para diseño ---
 \usepackage{latexsym,amsmath,xcolor,multicol,booktabs,calligra}
 \usepackage{graphicx,listings,stackengine,tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
 
 % --- Definición de Cajas Personalizadas ---
 \newenvironment{cajaazul}[1]{%
@@ -28,7 +29,7 @@
 % --- DATOS DEL PROYECTO ---
 \author{Juan Pedro García Sanz \and Pablo Revuelto de Miguel \and \\ Adolfo Peña Marín}
 \title{Robochess}
-\subtitle{Dos brazos robóticos jugando al ajedrez de forma}
+\subtitle{Dos brazos robóticos jugando al ajedrez de forma autónoma}
 \institute{Robótica Inteligente \\ Universidad Loyola Andalucía}
 
 % El logo se añade aquí, justo encima de la fecha con un salto de línea
@@ -55,7 +56,7 @@
 \end{frame}
 
 % ============================================================
-% ÍNDICE (solo 4 secciones principales -> corto)
+% ÍNDICE
 % ============================================================
 \begin{frame}{Índice}
     \tableofcontents[hideallsubsections]
@@ -66,110 +67,119 @@
 % ============================================================
 \section{Introducción y Arquitectura}
 
-\subsection{Objetivo y alcance}
+\subsection{Objetivo}
 
-\begin{frame}{La idea}
+\begin{frame}{Qué es Robochess}
 
-\begin{cajaazul}{El objetivo}
-Dos brazos robóticos \textbf{ABB IRB120} juegan al ajedrez de forma
-autónoma sobre un tablero real, dentro de un entorno simulado.
+\begin{cajaazul}{La idea}
+Dos manipuladores \textbf{ABB IRB120} enfrentados juegan una partida de
+ajedrez de forma autónoma en simulación: le dictas la jugada por voz, el
+sistema la valida y el brazo la ejecuta sobre el tablero.
 \end{cajaazul}
 
-\begin{cajaverde}{En una frase}
-Un sistema que \textbf{ve, escucha, piensa y mueve} las piezas, como lo
-haría una persona jugando una partida.
+\begin{cajaverde}{Por qué tiene su gracia}
+No es mover un brazo aislado. Hay que encajar en un mismo flujo cuatro mundos
+que normalmente van por separado: \textbf{percepción} (visión), \textbf{interfaz
+por voz}, \textbf{razonamiento} sobre las reglas y \textbf{planificación de
+movimiento}. El reto está en que todo eso hable entre sí.
 \end{cajaverde}
 
 \end{frame}
 
-\begin{frame}{¿Qué sabe hacer el robot?}
+\subsection{Arquitectura}
 
-\begin{cajaazul}{Cuatro capacidades clave}
-\begin{itemize}\setlength{\itemsep}{6pt}
-    \item \textbf{Ver} el tablero con una cámara cenital.
-    \item \textbf{Escuchar} jugadas dictadas por voz.
-    \item \textbf{Entender} las reglas y comprobar que la jugada es legal.
-    \item \textbf{Mover} las piezas cogiéndolas con un brazo.
-\end{itemize}
-\end{cajaazul}
+\begin{frame}{Arquitectura: nodos que se hablan}
 
-\end{frame}
-
-\subsection{Arquitectura general}
-
-\begin{frame}{Un sistema modular}
-
-\begin{cajaazul}{Piezas independientes}
-El proyecto se divide en partes independientes que se comunican entre sí,
-cada una responsable de una tarea concreta.
-\end{cajaazul}
-
-\begin{cajaverde}{Las partes principales}
-\begin{itemize}\setlength{\itemsep}{4pt}
-    \item Los \textbf{ojos}: la cámara que observa el tablero.
-    \item Los \textbf{oídos}: el micrófono que recibe las jugadas.
-    \item El \textbf{cerebro}: decide y comprueba las reglas.
-    \item Los \textbf{brazos}: ejecutan el movimiento.
-\end{itemize}
-\end{cajaverde}
-
-\end{frame}
-
-\begin{frame}{El flujo, de principio a fin}
-
-\begin{cajaazul}{Cómo viaja la información}
+\begin{columns}[c]
+\begin{column}{0.52\textwidth}
 \centering
-\textbf{Voz} y \textbf{Cámara} \\[4pt]
-$\downarrow$ \\[4pt]
-\textbf{Cerebro} (decide y valida la jugada) \\[4pt]
-$\downarrow$ \\[4pt]
-\textbf{Movimiento} (planifica la trayectoria) \\[4pt]
-$\downarrow$ \\[4pt]
-\textbf{Simulación} (el brazo mueve la pieza)
-\end{cajaazul}
+\begin{tikzpicture}[
+    font=\small,
+    nodo/.style={
+        rounded corners, draw, thick, align=center,
+        minimum width=2.6cm, minimum height=0.95cm, fill=cyan!10!white,
+        draw=cyan!70!black},
+    sensor/.style={nodo, fill=teal!12!white, draw=teal!80!black},
+    actua/.style={nodo, fill=orange!12!white, draw=orange!90!black},
+    flecha/.style={-{Stealth[length=2.5mm]}, thick, draw=gray!70!black},
+]
+\node[sensor] (voz)   {\textbf{Voz}\\ \scriptsize micrófono};
+\node[sensor] (cam)   [right=0.9cm of voz] {\textbf{Cámara}\\ \scriptsize tablero};
+\node[nodo]   (brain) [below=0.8cm of $(voz)!0.5!(cam)$]
+    {\textbf{Cerebro}\\ \scriptsize decide y valida};
+\node[nodo]   (mov)   [below=0.7cm of brain]
+    {\textbf{Movimiento}\\ \scriptsize planifica};
+\node[actua]  (sim)   [below=0.7cm of mov]
+    {\textbf{Simulación}\\ \scriptsize ejecuta};
+
+\draw[flecha] (voz) -- (brain.north);
+\draw[flecha] (cam) -- (brain.north);
+\draw[flecha] (brain) -- (mov);
+\draw[flecha] (mov) -- (sim);
+\draw[flecha, dashed, draw=teal!70!black]
+    (sim.east) to[out=0, in=0]
+    node[right=1pt, midway, font=\scriptsize, text=teal!50!black, align=left]
+    {valida} (cam.east);
+\end{tikzpicture}
+\end{column}
+
+\begin{column}{0.48\textwidth}
+\begin{cajaverde}{Todo sobre ROS\,2 Jazzy}
+Cada bloque es uno o varios \textbf{nodos} independientes que se comunican por:
+\begin{itemize}\setlength{\itemsep}{2pt}
+    \item \textbf{Topics}: flujo continuo (la imagen de la cámara).
+    \item \textbf{Servicios}: petición–respuesta (interpretar una frase).
+    \item \textbf{Acciones}: tareas largas con \textit{feedback} (ejecutar la jugada).
+\end{itemize}
+Así cada parte se desarrolla y se prueba por separado.
+\end{cajaverde}
+\end{column}
+\end{columns}
 
 \end{frame}
 
 % ============================================================
-% 2. LOS SENTIDOS: VISIÓN Y VOZ
+% 2. PERCEPCIÓN: VISIÓN Y VOZ
 % ============================================================
-\section{Los Sentidos: Visión y Voz}
+\section{Percepción: Visión y Voz}
 
-\subsection{La vista}
+\subsection{Visión}
 
-\begin{frame}{La vista: reconocer el tablero}
+\begin{frame}{Visión: del píxel a la casilla}
 
-\begin{cajaazul}{Cámara cenital}
-Una cámara situada sobre el tablero observa la partida en todo momento.
+\begin{cajaazul}{Detección de piezas}
+Una cámara cenital observa el tablero. Un detector \textbf{YOLOv8} localiza
+cada pieza y la clasifica en \textbf{12 clases} (6 tipos $\times$ 2 colores),
+devolviendo una caja por pieza.
 \end{cajaazul}
 
-\begin{cajaverde}{¿Cómo sabe dónde está cada pieza?}
-\begin{itemize}\setlength{\itemsep}{4pt}
-    \item Un modelo de \textbf{inteligencia artificial} detecta cada pieza
-          en la imagen y reconoce su tipo y color.
-    \item El sistema traduce la posición en la foto a una \textbf{casilla
-          concreta} del tablero (e2, e4\dots).
-\end{itemize}
+\begin{cajaverde}{De la caja a la coordenada}
+El centro de cada caja pasa por una \textbf{homografía} cenital ---calibrada
+con la altura y el campo de visión de la cámara--- que convierte píxeles en
+coordenadas del tablero, y de ahí a casilla (a1--h8). El resultado es un
+estado del tablero ``observado''.
+
+\smallskip
+\textit{Rol:} la visión \textbf{verifica}, no manda. Contrasta lo que ve con
+el estado interno; la autoridad es siempre el motor de ajedrez.
 \end{cajaverde}
 
 \end{frame}
 
-\subsection{El oído}
+\subsection{Voz}
 
-\begin{frame}{El oído: entender la voz}
+\begin{frame}{Voz: del audio a una jugada legal}
 
-\begin{cajaazul}{De la voz a la jugada}
-\begin{itemize}\setlength{\itemsep}{4pt}
-    \item El micrófono \textbf{detecta} cuándo alguien habla.
-    \item Un sistema de reconocimiento de voz lo convierte en \textbf{texto}.
-    \item Ese texto se interpreta como una \textbf{jugada} concreta
-          (``mueve e2 a e4'').
-\end{itemize}
+\begin{cajaazul}{El recorrido}
+Detección de actividad de voz (\textbf{VAD}) que corta cuando dejas de hablar
+$\rightarrow$ \textbf{Whisper} transcribe a texto $\rightarrow$ un \textbf{LLM}
+traduce la frase a notación de ajedrez (\texttt{e2e4}).
 \end{cajaazul}
-
-\begin{cajaverde}{Flexible}
-Funciona tanto dictando por voz como escribiendo directamente la jugada,
-útil para hacer pruebas rápidas.
+\begin{cajaverde}{Una decisión que nos salvó}
+El parser solo puede devolver un movimiento que esté en la lista de jugadas
+\textbf{legales}: nunca se inventa nada. Y si el LLM no responde o la conexión
+falla, un parser por \textbf{expresiones regulares} hace de red de seguridad.
+Robusto incluso con transcripciones ruidosas.
 \end{cajaverde}
 
 \end{frame}
@@ -179,125 +189,105 @@ Funciona tanto dictando por voz como escribiendo directamente la jugada,
 % ============================================================
 \section{Decisión y Movimiento}
 
-\subsection{El cerebro del juego}
+\subsection{Cerebro}
 
-\begin{frame}{Quien decide y dirige}
+\begin{frame}{El cerebro: las reglas mandan}
 
-\begin{cajaazul}{El árbitro del sistema}
-\begin{itemize}\setlength{\itemsep}{4pt}
-    \item Comprueba que cada jugada propuesta es \textbf{legal}.
-    \item Reconoce situaciones de \textbf{jaque, jaque mate y tablas}.
-    \item Lleva el control del \textbf{turno} de cada brazo.
-\end{itemize}
+\begin{cajaazul}{Estado y validación}
+El motor (\textbf{python-chess}) mantiene el estado autoritativo de la partida
+en formato \textbf{FEN}. Para cada jugada propuesta comprueba legalidad, turno
+correcto y detecta \textbf{jaque, mate y tablas}.
 \end{cajaazul}
 
-\begin{cajaverde}{Coordinador}
-Recibe la información de la vista y la voz, decide qué hacer y da la orden
-al brazo correspondiente para ejecutar el movimiento.
+\begin{cajaverde}{El director de orquesta}
+Si la jugada es válida, la empaqueta como objetivo y se la pasa al subsistema
+de movimiento a través de una \textbf{acción} ROS\,2. Cuando el brazo termina,
+actualiza el estado y cede el turno al otro bando.
 \end{cajaverde}
 
 \end{frame}
 
-\subsection{El movimiento}
+\subsection{Movimiento}
 
-\begin{frame}{Mover las piezas sin chocar}
+\begin{frame}{Movimiento: planificar sin chocar}
 
-\begin{cajaazul}{Planificación de trayectorias}
-El sistema calcula \textbf{cómo} debe moverse cada brazo para llegar a la
-pieza y llevarla a su destino \textbf{sin colisionar} con el tablero,
-las piezas ni el otro brazo.
+\begin{cajaazul}{MoveIt\,2}
+Cada brazo tiene 6 grados de libertad. \textbf{MoveIt\,2} resuelve la
+\textbf{cinemática inversa} y busca con \textbf{OMPL} una trayectoria libre de
+colisiones hasta la pieza y hasta su destino, evitando tablero, piezas y el
+otro brazo.
 \end{cajaazul}
 
-\begin{cajaverde}{Coger y soltar piezas}
-El brazo usa un \textbf{agarre magnético} en su extremo: se aproxima a la
-pieza, la sujeta, la traslada y la suelta en la casilla de destino.
+\begin{cajaverde}{Pick \& place por fases}
+Aproximar, agarrar, elevar, transportar, soltar y retirarse. El agarre es
+\textbf{magnético} para simplificar la manipulación de piezas pequeñas.
+Detalle de diseño: reutilizamos un único planificador en marcha en lugar de
+levantar un segundo, evitando duplicar trabajo.
 \end{cajaverde}
 
 \end{frame}
 
 % ============================================================
-% 4. EL SISTEMA EN CONJUNTO
+% 4. INTEGRACIÓN Y RESULTADOS
 % ============================================================
-\section{El Sistema en Conjunto}
+\section{Integración y Resultados}
 
-\subsection{El entorno simulado}
+\subsection{Simulación}
 
-\begin{frame}{El escenario}
+\begin{frame}{El escenario simulado}
 
-\begin{cajaazul}{El mundo virtual}
-\begin{itemize}\setlength{\itemsep}{4pt}
-    \item Una \textbf{mesa} con un \textbf{tablero} de ajedrez.
-    \item Los \textbf{dos brazos} IRB120, uno para las blancas y otro para
-          las negras.
-    \item Las \textbf{32 piezas} colocadas en su posición inicial.
-    \item La \textbf{cámara cenital} que vigila la partida.
+\begin{cajaazul}{Gazebo Harmonic}
+La escena: mesa, tablero, los dos IRB120 (blancas y negras) y la cámara
+cenital, con física realista de peso y contactos.
+\end{cajaazul}
+
+\begin{cajaverde}{Control de los brazos}
+Las articulaciones se mueven con \textbf{ros2\_control} a través del puente
+ROS--Gazebo, con un controlador de trayectoria por brazo. Es la misma
+infraestructura que se usaría sobre un robot real.
+\end{cajaverde}
+
+\end{frame}
+
+\subsection{Resultados}
+
+\begin{frame}{Qué funciona y qué nos costó}
+
+\begin{cajaazul}{Lo que funciona hoy}
+\begin{itemize}\setlength{\itemsep}{2pt}
+    \item Partida dictada por voz, de principio a fin.
+    \item Validación de reglas en tiempo real.
+    \item \textit{Pick \& place} ejecutado por los dos brazos.
+    \item Visión operativa como validador del tablero.
 \end{itemize}
 \end{cajaazul}
 
-\begin{cajaverde}{Física realista}
-Todo ocurre en un simulador que reproduce el peso, los contactos y el
-movimiento como en el mundo real.
-\end{cajaverde}
+\begin{cajaranja}{Los retos que de verdad costaron}
+\begin{itemize}\setlength{\itemsep}{2pt}
+    \item Capturar el micrófono bajo WSL2 (audio que entraba en silencio).
+    \item Que la pieza siguiera al gripper durante el transporte.
+    \item Sobrevivir a transcripciones ruidosas (de ahí el \textit{fallback}).
+\end{itemize}
+\end{cajaranja}
 
 \end{frame}
 
-\subsection{Una jugada paso a paso}
-
-\begin{frame}{El ciclo completo de un movimiento}
-
-\begin{cajaazul}{De la orden al movimiento}
-\begin{enumerate}\setlength{\itemsep}{4pt}
-    \item El usuario \textbf{dicta} una jugada.
-    \item El sistema la \textbf{entiende} y la traduce a una jugada concreta.
-    \item El cerebro comprueba que es \textbf{legal}.
-    \item Se \textbf{planifica} la trayectoria del brazo.
-    \item El brazo \textbf{coge y coloca} la pieza.
-    \item Se actualiza el estado y se \textbf{cambia de turno}.
-\end{enumerate}
-\end{cajaazul}
-
-\begin{cajaverde}{Y vuelta a empezar}
-El sistema queda a la espera de la siguiente jugada.
-\end{cajaverde}
-
-\end{frame}
-
-\subsection{Tecnologías y conclusiones}
-
-\begin{frame}{Tecnologías utilizadas}
-
-\begin{cajaazul}{Las herramientas detrás del proyecto}
-\centering\small
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Tecnología} & \textbf{Para qué se usa} \\
-\midrule
-ROS 2 Jazzy      & Comunicación entre todas las partes \\
-Gazebo Harmonic  & Simulación física del entorno \\
-MoveIt 2         & Planificación del movimiento de los brazos \\
-Visión por IA    & Detección de piezas en la imagen \\
-Whisper          & Reconocimiento de voz \\
-python-chess     & Validación de las reglas del ajedrez \\
-\bottomrule
-\end{tabular}
-\end{cajaazul}
-
-\end{frame}
+\subsection{Conclusiones}
 
 \begin{frame}{Conclusiones}
 
-\begin{cajaazul}{Lo que hemos logrado}
-\begin{itemize}\setlength{\itemsep}{4pt}
-    \item Un sistema \textbf{completo} que integra visión, voz, decisión y
-          movimiento.
-    \item \textbf{Dos brazos} coordinados jugando una partida real.
-    \item Una arquitectura \textbf{modular}: cada parte se puede mejorar por
-          separado.
-\end{itemize}
+\begin{cajaazul}{Lo que nos llevamos}
+Integrar IA ---visión, voz y lenguaje--- con robótica ---planificación y
+control--- sobre ROS\,2, y que todo funcione junto. La arquitectura modular
+fue clave: cada pieza es sustituible sin tocar el resto.
 \end{cajaazul}
 
-\begin{cajaverde}{Próximos pasos}
-Mejorar la precisión de la visión y afinar los movimientos de los brazos.
+\begin{cajaverde}{Siguientes pasos}
+\begin{itemize}\setlength{\itemsep}{2pt}
+    \item Un motor que juegue solo (p.\,ej. Stockfish) para robot contra humano.
+    \item Saltar de la simulación al hardware real (calibración con marcadores).
+    \item Afinar el detector de visión y los tiempos de planificación.
+\end{itemize}
 \end{cajaverde}
 
 \end{frame}
